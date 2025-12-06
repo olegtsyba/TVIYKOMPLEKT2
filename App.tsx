@@ -40,6 +40,9 @@ const PlayIcon = () => (
 const StarIcon = ({ filled }: { filled: boolean }) => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill={filled ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={filled ? "text-yellow-500" : "text-gray-300"}><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
 );
+const ZoomInIcon = () => (
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="drop-shadow-md"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line><line x1="11" y1="8" x2="11" y2="14"></line><line x1="8" y1="11" x2="14" y2="11"></line></svg>
+);
 
 const TG_BOT_TOKEN = '7628860733:AAHrK-pL_aQ0HpJ1tB0O6uC-6C6QzO5e3i8';
 const TG_CHAT_ID = '-4763943340';
@@ -50,6 +53,12 @@ const DEFAULT_SETTINGS: SiteSettings = {
   heroBackgroundUrl: "https://images.unsplash.com/photo-1483985988355-763728e1935b?q=80&w=2070&auto=format&fit=crop",
   logoText: "TVIYKOMPLEKT"
 };
+
+interface LightboxItem {
+    type: 'image' | 'video';
+    url: string;
+    caption?: string;
+}
 
 export default function App() {
   // Data State
@@ -85,6 +94,7 @@ export default function App() {
 
   // Lightbox State
   const [isLightboxOpen, setIsLightboxOpen] = useState(false);
+  const [lightboxItems, setLightboxItems] = useState<LightboxItem[]>([]);
   const [lightboxIndex, setLightboxIndex] = useState(0);
 
   // References
@@ -187,6 +197,7 @@ export default function App() {
       setSelectedSizeForModal('');
       setSizeError(false);
       setIsLightboxOpen(false);
+      setLightboxItems([]);
     }
   }, [selectedProduct]);
 
@@ -378,29 +389,29 @@ export default function App() {
   }, [selectedProduct]);
 
   // Gather all review media for lightbox
-  const allReviewMedia = useMemo(() => {
+  const allReviewMedia: LightboxItem[] = useMemo(() => {
     if (!selectedProduct || !selectedProduct.reviews) return [];
     return selectedProduct.reviews
       .filter(r => r.url) // Only those with media
-      .map(r => ({ type: r.type || 'image', url: r.url, user: r.user }));
+      .map(r => ({ type: r.type || 'image', url: r.url!, caption: r.user }));
   }, [selectedProduct]);
 
-  const openLightbox = (mediaUrl: string) => {
-    const index = allReviewMedia.findIndex(m => m.url === mediaUrl);
-    if (index >= 0) {
-      setLightboxIndex(index);
-      setIsLightboxOpen(true);
-    }
+  // Generalized Lightbox Opener
+  const openLightbox = (items: LightboxItem[], index: number) => {
+    if (!items || items.length === 0) return;
+    setLightboxItems(items);
+    setLightboxIndex(index);
+    setIsLightboxOpen(true);
   };
 
   const nextLightboxMedia = (e: React.MouseEvent) => {
     e.stopPropagation();
-    setLightboxIndex(prev => (prev + 1) % allReviewMedia.length);
+    setLightboxIndex(prev => (prev + 1) % lightboxItems.length);
   };
 
   const prevLightboxMedia = (e: React.MouseEvent) => {
     e.stopPropagation();
-    setLightboxIndex(prev => (prev - 1 + allReviewMedia.length) % allReviewMedia.length);
+    setLightboxIndex(prev => (prev - 1 + lightboxItems.length) % lightboxItems.length);
   };
 
   return (
@@ -660,21 +671,31 @@ export default function App() {
                         <div className="w-full md:w-1/2 bg-gray-50 p-4 md:p-8 flex flex-col h-[50vh] md:h-auto">
                            {(() => {
                                const images = getProductImages(selectedProduct);
+                               // Prepare image objects for the lightbox
+                               const productLightboxItems: LightboxItem[] = images.map(url => ({ type: 'image', url }));
+
                                return (
                                    <>
-                                       <div className="flex-1 relative overflow-hidden bg-white shadow-sm aspect-[4/5] md:aspect-auto">
+                                       <div 
+                                            className="flex-1 relative overflow-hidden bg-white shadow-sm aspect-[4/5] md:aspect-auto cursor-zoom-in group"
+                                            onClick={() => openLightbox(productLightboxItems, currentImageIndex)}
+                                       >
                                             {images && images.length > 0 && (
-                                                <img 
+                                                <>
+                                                    <img 
                                                         src={getImageUrl(images[currentImageIndex] || images[0])} 
                                                         alt={selectedProduct.title} 
-                                                        /* FIX: object-contain to prevent cropping on mobile */
-                                                        className="w-full h-full object-contain object-center bg-gray-50"
+                                                        className="w-full h-full object-contain object-center bg-gray-50 transition-transform duration-300"
                                                     />
+                                                    <div className="absolute top-4 left-4 bg-white/80 p-2 rounded-full opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                                                        <ZoomInIcon />
+                                                    </div>
+                                                </>
                                             )}
                                             {images && images.length > 1 && (
                                                 <>
                                                     <button 
-                                                        className="absolute left-2 top-1/2 -translate-y-1/2 bg-white/70 p-2 hover:bg-white rounded-full shadow-sm transition-all"
+                                                        className="absolute left-2 top-1/2 -translate-y-1/2 bg-white/70 p-2 hover:bg-white rounded-full shadow-sm transition-all z-10"
                                                         onClick={(e) => {
                                                             e.stopPropagation();
                                                             setCurrentImageIndex(prev => prev === 0 ? images.length - 1 : prev - 1);
@@ -683,7 +704,7 @@ export default function App() {
                                                         <ArrowLeftIcon />
                                                     </button>
                                                     <button 
-                                                        className="absolute right-2 top-1/2 -translate-y-1/2 bg-white/70 p-2 hover:bg-white rounded-full shadow-sm transition-all"
+                                                        className="absolute right-2 top-1/2 -translate-y-1/2 bg-white/70 p-2 hover:bg-white rounded-full shadow-sm transition-all z-10"
                                                         onClick={(e) => {
                                                             e.stopPropagation();
                                                             setCurrentImageIndex(prev => (prev + 1) % images.length);
@@ -902,14 +923,19 @@ export default function App() {
                                                  </div>
                                               </div>
                                               <p className="text-gray-600 text-sm italic">"{review.text}"</p>
-                                              {/* Review Media Thumbnail - Triggers Lightbox */}
+                                              {/* Review Media Thumbnail - Triggers Unified Lightbox */}
                                               {review.url && (
                                                  <div 
                                                     className="mt-3 w-24 h-24 rounded overflow-hidden border border-gray-200 cursor-pointer hover:opacity-90 relative group"
-                                                    onClick={() => openLightbox(review.url!)}
+                                                    onClick={() => {
+                                                        const targetIndex = allReviewMedia.findIndex(item => item.url === review.url);
+                                                        openLightbox(allReviewMedia, targetIndex !== -1 ? targetIndex : 0);
+                                                    }}
                                                   >
                                                      <img src={review.url} className="w-full h-full object-cover" alt="Review attachment" />
-                                                     <div className="absolute inset-0 bg-black/20 group-hover:bg-transparent transition-colors"></div>
+                                                     <div className="absolute inset-0 bg-black/20 group-hover:bg-transparent transition-colors flex items-center justify-center">
+                                                         <ZoomInIcon />
+                                                     </div>
                                                  </div>
                                               )}
                                           </div>
@@ -928,9 +954,9 @@ export default function App() {
         </div>
       )}
 
-      {/* Lightbox Modal (For Reviews) */}
-      {isLightboxOpen && allReviewMedia.length > 0 && (
-        <div className="fixed inset-0 z-[100] bg-black flex items-center justify-center animate-fade-in">
+      {/* Unified Lightbox Modal */}
+      {isLightboxOpen && lightboxItems.length > 0 && (
+        <div className="fixed inset-0 z-[100] bg-black/95 flex items-center justify-center animate-fade-in select-none">
            {/* Close Button */}
            <button 
              onClick={() => setIsLightboxOpen(false)}
@@ -940,44 +966,54 @@ export default function App() {
            </button>
 
            {/* Navigation Buttons */}
-           {allReviewMedia.length > 1 && (
+           {lightboxItems.length > 1 && (
              <>
                <button 
                   onClick={prevLightboxMedia}
-                  className="absolute left-2 md:left-8 top-1/2 -translate-y-1/2 text-white/70 hover:text-white p-4 z-50"
+                  className="absolute left-2 md:left-8 top-1/2 -translate-y-1/2 text-white/70 hover:text-white p-4 z-50 transition-transform active:scale-95"
                >
-                 <div className="bg-black/50 p-3 rounded-full"><ArrowLeftIcon /></div>
+                 <div className="bg-white/10 backdrop-blur-sm p-4 rounded-full border border-white/20"><ArrowLeftIcon /></div>
                </button>
                <button 
                   onClick={nextLightboxMedia}
-                  className="absolute right-2 md:right-8 top-1/2 -translate-y-1/2 text-white/70 hover:text-white p-4 z-50"
+                  className="absolute right-2 md:right-8 top-1/2 -translate-y-1/2 text-white/70 hover:text-white p-4 z-50 transition-transform active:scale-95"
                >
-                  <div className="bg-black/50 p-3 rounded-full"><ArrowRightIcon /></div>
+                  <div className="bg-white/10 backdrop-blur-sm p-4 rounded-full border border-white/20"><ArrowRightIcon /></div>
                </button>
              </>
            )}
 
            {/* Content */}
-           <div className="relative w-full h-full p-4 flex items-center justify-center">
-              {allReviewMedia[lightboxIndex].type === 'video' ? (
+           <div className="relative w-full h-full p-4 md:p-12 flex items-center justify-center">
+              {lightboxItems[lightboxIndex].type === 'video' ? (
                   <video 
-                    src={allReviewMedia[lightboxIndex].url} 
+                    src={lightboxItems[lightboxIndex].url} 
                     controls 
                     className="max-w-full max-h-full object-contain"
                   ></video>
               ) : (
                   <img 
-                    src={allReviewMedia[lightboxIndex].url} 
-                    alt={`Review by ${allReviewMedia[lightboxIndex].user}`}
+                    src={lightboxItems[lightboxIndex].url} 
+                    alt="Full screen view"
                     className="max-w-full max-h-full object-contain"
                   />
               )}
+              
+              {/* Counter Indicator */}
+              {lightboxItems.length > 1 && (
+                  <div className="absolute top-6 left-6 text-white/80 text-sm font-mono bg-black/50 px-3 py-1 rounded-full">
+                      {lightboxIndex + 1} / {lightboxItems.length}
+                  </div>
+              )}
+
               {/* Caption */}
-              <div className="absolute bottom-8 left-0 w-full text-center pointer-events-none">
-                 <span className="bg-black/60 text-white px-4 py-2 rounded-full text-sm">
-                    {allReviewMedia[lightboxIndex].user} ({lightboxIndex + 1} / {allReviewMedia.length})
-                 </span>
-              </div>
+              {lightboxItems[lightboxIndex].caption && (
+                  <div className="absolute bottom-10 left-0 w-full text-center pointer-events-none">
+                    <span className="bg-black/60 backdrop-blur text-white px-6 py-3 rounded-full text-sm font-medium">
+                        {lightboxItems[lightboxIndex].caption}
+                    </span>
+                  </div>
+              )}
            </div>
         </div>
       )}
