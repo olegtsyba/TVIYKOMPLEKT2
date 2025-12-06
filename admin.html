@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Panel - TVIYKOMPLEKT</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/index.css">
+</head>
+<body class="bg-gray-100 text-gray-800 antialiased min-h-screen">
+
+    <!-- Notification Toast -->
+    <div id="toast" class="fixed top-5 right-5 z-50 transform translate-x-full transition-transform duration-300">
+        <div class="bg-black text-white px-6 py-4 shadow-lg rounded flex items-center gap-3">
+            <i class="fas fa-info-circle"></i>
+            <span id="toast-msg" class="font-medium text-sm uppercase tracking-wide">Message</span>
+        </div>
+    </div>
+
+    <div class="max-w-5xl mx-auto p-6">
+        
+        <!-- Header -->
+        <header class="flex justify-between items-center mb-8">
+            <div>
+                <h1 class="text-3xl font-bold tracking-tight text-black">ADMIN PANEL</h1>
+                <p class="text-sm text-gray-500 mt-1">Додавання нового товару до каталогу</p>
+            </div>
+            <button onclick="window.location.reload()" class="text-sm text-gray-500 hover:text-black underline">
+                Скинути форму
+            </button>
+        </header>
+
+        <form id="productForm" class="space-y-8">
+
+            <!-- 1. Основна інформація -->
+            <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+                <h2 class="text-lg font-bold uppercase tracking-wider mb-6 border-b pb-2">1. Основна інформація</h2>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <!-- Title -->
+                    <div class="col-span-2">
+                        <label class="block text-xs font-bold uppercase text-gray-500 mb-2">Назва товару</label>
+                        <input type="text" id="title" required placeholder="Напр: MA лосини Verona" 
+                            class="w-full bg-gray-50 border border-gray-300 p-3 rounded focus:outline-none focus:border-black focus:ring-1 focus:ring-black transition">
+                    </div>
+
+                    <!-- Price -->
+                    <div>
+                        <label class="block text-xs font-bold uppercase text-gray-500 mb-2">Ціна (UAH)</label>
+                        <input type="number" id="price" required placeholder="0" 
+                            class="w-full bg-gray-50 border border-gray-300 p-3 rounded focus:outline-none focus:border-black transition">
+                    </div>
+
+                    <!-- YouTube -->
+                    <div>
+                        <label class="block text-xs font-bold uppercase text-gray-500 mb-2">YouTube ID</label>
+                        <input type="text" id="videoId" placeholder="dQw4w9WgXcQ" 
+                            class="w-full bg-gray-50 border border-gray-300 p-3 rounded focus:outline-none focus:border-black transition">
+                    </div>
+
+                    <!-- Category -->
+                    <div>
+                        <label class="block text-xs font-bold uppercase text-gray-500 mb-2">Категорія</label>
+                        <select id="category" class="w-full bg-gray-50 border border-gray-300 p-3 rounded focus:outline-none focus:border-black transition">
+                            <option value="Лосини">Лосини</option>
+                            <option value="Топ">Топ</option>
+                            <option value="Комплект">Комплект</option>
+                            <option value="Комбінезон">Комбінезон</option>
+                            <option value="Рашгард">Рашгард</option>
+                            <option value="Футболка">Футболка</option>
+                        </select>
+                    </div>
+
+                    <!-- Size Category -->
+                    <div>
+                        <label class="block text-xs font-bold uppercase text-gray-500 mb-2">Таблиця розмірів</label>
+                        <select id="sizeCategory" class="w-full bg-gray-50 border border-gray-300 p-3 rounded focus:outline-none focus:border-black transition">
+                            <option value="default">Загальна</option>
+                            <option value="leggings">Лосини (leggings)</option>
+                            <option value="top">Топ (top)</option>
+                            <option value="set">Комплект (set)</option>
+                            <option value="bodysuit">Комбінезон (bodysuit)</option>
+                            <option value="rashguard">Рашгард</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 2. Медіа (Фото товару) -->
+            <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+                <h2 class="text-lg font-bold uppercase tracking-wider mb-6 border-b pb-2">2. Фото товару</h2>
+                
+                <div class="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:bg-gray-50 transition cursor-pointer relative">
+                    <input type="file" id="productImages" multiple accept="image/*" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer">
+                    <div class="text-gray-400">
+                        <i class="fas fa-cloud-upload-alt text-4xl mb-3"></i>
+                        <p class="text-sm font-medium">Перетягніть фото сюди або клікніть</p>
+                        <p class="text-xs mt-1">Можна обрати декілька файлів</p>
+                    </div>
+                </div>
+                <!-- Preview Area -->
+                <div id="imagePreviewContainer" class="grid grid-cols-4 md:grid-cols-6 gap-4 mt-4"></div>
+            </div>
+
+            <!-- 3. Варіанти (Розміри та Кольори) -->
+            <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+                <h2 class="text-lg font-bold uppercase tracking-wider mb-6 border-b pb-2">3. Варіанти</h2>
+                
+                <!-- Sizes -->
+                <div class="mb-6">
+                    <label class="block text-xs font-bold uppercase text-gray-500 mb-3">Розміри</label>
+                    <div class="flex flex-wrap gap-4">
+                        <label class="inline-flex items-center cursor-pointer">
+                            <input type="checkbox" name="sizes" value="XS" class="form-checkbox h-5 w-5 text-black rounded border-gray-300 focus:ring-black">
+                            <span class="ml-2 text-sm">XS</span>
+                        </label>
+                        <label class="inline-flex items-center cursor-pointer">
+                            <input type="checkbox" name="sizes" value="S" checked class="form-checkbox h-5 w-5 text-black rounded border-gray-300 focus:ring-black">
+                            <span class="ml-2 text-sm">S</span>
+                        </label>
+                        <label class="inline-flex items-center cursor-pointer">
+                            <input type="checkbox" name="sizes" value="M" checked class="form-checkbox h-5 w-5 text-black rounded border-gray-300 focus:ring-black">
+                            <span class="ml-2 text-sm">M</span>
+                        </label>
+                        <label class="inline-flex items-center cursor-pointer">
+                            <input type="checkbox" name="sizes" value="L" checked class="form-checkbox h-5 w-5 text-black rounded border-gray-300 focus:ring-black">
+                            <span class="ml-2 text-sm">L</span>
+                        </label>
+                        <label class="inline-flex items-center cursor-pointer">
+                            <input type="checkbox" name="sizes" value="XL" class="form-checkbox h-5 w-5 text-black rounded border-gray-300 focus:ring-black">
+                            <span class="ml-2 text-sm">XL</span>
+                        </label>
+                        <label class="inline-flex items-center cursor-pointer">
+                            <input type="checkbox" name="sizes" value="XXL" class="form-checkbox h-5 w-5 text-black rounded border-gray-300 focus:ring-black">
+                            <span class="ml-2 text-sm">XXL</span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Colors -->
+                <div>
+                    <div class="flex justify-between items-center mb-3">
+                        <label class="block text-xs font-bold uppercase text-gray-500">Кольори</label>
+                        <button type="button" id="addColorBtn" class="text-xs bg-gray-200 hover:bg-gray-300 px-3 py-1 rounded transition">
+                            <i class="fas fa-plus mr-1"></i> Додати
+                        </button>
+                    </div>
+                    <div id="colorsContainer" class="space-y-3">
+                        <!-- Dynamic Color Rows -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- 4. Відгуки -->
+            <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+                <div class="flex justify-between items-center mb-6 border-b pb-2">
+                    <h2 class="text-lg font-bold uppercase tracking-wider">4. Відгуки клієнтів</h2>
+                    <button type="button" id="addReviewBtn" class="bg-black text-white px-4 py-2 text-xs font-bold uppercase tracking-wide hover:bg-gray-800 transition rounded-sm shadow-md">
+                        <i class="fas fa-plus mr-2"></i> Додати відгук
+                    </button>
+                </div>
+
+                <div id="reviewsContainer" class="space-y-4">
+                    <!-- Dynamic Review Cards -->
+                    <div class="text-center text-gray-400 py-4 text-sm italic" id="noReviewsMsg">
+                        Відгуків поки немає. Додайте перший!
+                    </div>
+                </div>
+            </div>
+
+            <!-- Submit Action -->
+            <div class="sticky bottom-4 z-10">
+                <button type="submit" id="submitBtn" class="w-full bg-black text-white py-4 text-sm font-bold uppercase tracking-widest hover:bg-gray-900 transition shadow-xl rounded-sm flex justify-center items-center gap-2">
+                    <span>Зберегти товар</span>
+                </button>
+            </div>
+
+        </form>
+    </div>
+
+    <!-- FIREBASE MODULES -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
+        import { getFirestore, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
+        import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-storage.js";
+
+        // CONFIGURATION
+        const firebaseConfig = {
+            apiKey: "AIzaSyBcnbheQccvMjAX_xCFGaPy1RlOTE_UPm8",
+            authDomain: "tviykomplekt-88100.firebaseapp.com",
+            projectId: "tviykomplekt-88100",
+            storageBucket: "tviykomplekt-88100.firebasestorage.app",
+            messagingSenderId: "171289333626",
+            appId: "1:171289333626:web:fbf1dd2f2746984d9ad0c3",
+            measurementId: "G-C862G7Z28Y"
+        };
+
+        // INITIALIZE FIREBASE
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const storage = getStorage(app);
+
+        // --- UI UTILS ---
+
+        const showToast = (msg, isError = false) => {
+            const toast = document.getElementById('toast');
+            const toastMsg = document.getElementById('toast-msg');
+            const wrapper = toast.firstElementChild;
+            
+            toastMsg.innerText = msg;
+            wrapper.className = `px-6 py-4 shadow-lg rounded flex items-center gap-3 ${isError ? 'bg-red-600 text-white' : 'bg-black text-white'}`;
+            
+            toast.classList.remove('translate-x-full');
+            setTimeout(() => toast.classList.add('translate-x-full'), 3000);
+        };
+
+        const setLoading = (loading) => {
+            const btn = document.getElementById('submitBtn');
+            if (loading) {
+                btn.disabled = true;
+                btn.innerHTML = '<div class="loader"></div><span>Збереження...</span>';
+                btn.classList.add('opacity-75');
+            } else {
+                btn.disabled = false;
+                btn.innerHTML = '<span>Зберегти товар</span>';
+                btn.classList.remove('opacity-75');
+            }
+        };
+
+        // --- LOGIC: PRODUCT IMAGES ---
+        const productInput = document.getElementById('productImages');
+        const previewContainer = document.getElementById('imagePreviewContainer');
+        let selectedProductFiles = []; // Array to store actual File objects
+
+        productInput.addEventListener('change', (e) => {
+            const files = Array.from(e.target.files);
+            selectedProductFiles = [...selectedProductFiles, ...files];
+            renderProductPreviews();
+        });
+
+        const renderProductPreviews = () => {
+            previewContainer.innerHTML = '';
+            selectedProductFiles.forEach((file, index) => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const div = document.createElement('div');
+                    div.className = 'relative aspect-[4/5] bg-gray-100 rounded overflow-hidden border border-gray-200 group';
+                    div.innerHTML = `
+                        <img src="${e.target.result}" class="w-full h-full object-cover">
+                        <button type="button" onclick="removeProductImage(${index})" class="absolute top-1 right-1 bg-white rounded-full p-1 text-red-500 shadow-sm opacity-0 group-hover:opacity-100 transition">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    `;
+                    previewContainer.appendChild(div);
+                };
+                reader.readAsDataURL(file);
+            });
+        };
+
+        window.removeProductImage = (index) => {
+            selectedProductFiles.splice(index, 1);
+            renderProductPreviews();
+        };
+
+        // --- LOGIC: COLORS ---
+        const colorsContainer = document.getElementById('colorsContainer');
+        
+        document.getElementById('addColorBtn').addEventListener('click', () => {
+            const div = document.createElement('div');
+            div.className = 'flex items-center gap-3 bg-gray-50 p-2 rounded border border-gray-200 color-row animate-fade-in';
+            div.innerHTML = `
+                <div class="flex-grow">
+                    <input type="text" placeholder="Назва кольору (напр. Хакі)" class="w-full bg-transparent text-sm p-1 outline-none color-name">
+                </div>
+                <input type="color" class="w-8 h-8 rounded cursor-pointer border-none color-code" value="#000000">
+                <button type="button" class="text-gray-400 hover:text-red-500 px-2" onclick="this.parentElement.remove()">
+                    <i class="fas fa-trash-alt"></i>
+                </button>
+            `;
+            colorsContainer.appendChild(div);
+        });
+
+        // --- LOGIC: REVIEWS ---
+        const reviewsContainer = document.getElementById('reviewsContainer');
+        
+        document.getElementById('addReviewBtn').addEventListener('click', () => {
+            document.getElementById('noReviewsMsg').style.display = 'none';
+            
+            const div = document.createElement('div');
+            div.className = 'review-item bg-gray-50 p-4 rounded border border-gray-200 relative';
+            div.innerHTML = `
+                <button type="button" class="absolute top-2 right-2 text-gray-300 hover:text-red-500" onclick="this.parentElement.remove()">
+                    <i class="fas fa-times"></i>
+                </button>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="text-[10px] uppercase font-bold text-gray-500">Ім'я клієнта</label>
+                        <input type="text" class="review-user w-full border-b border-gray-300 bg-transparent py-1 text-sm outline-none focus:border-black" placeholder="Ім'я">
+                    </div>
+                    <div>
+                        <label class="text-[10px] uppercase font-bold text-gray-500">Оцінка</label>
+                        <select class="review-rating w-full border-b border-gray-300 bg-transparent py-1 text-sm outline-none">
+                            <option value="5">⭐⭐⭐⭐⭐ (5)</option>
+                            <option value="4">⭐⭐⭐⭐ (4)</option>
+                            <option value="3">⭐⭐⭐ (3)</option>
+                            <option value="2">⭐⭐ (2)</option>
+                            <option value="1">⭐ (1)</option>
+                        </select>
+                    </div>
+                    <div class="col-span-1 md:col-span-2">
+                        <label class="text-[10px] uppercase font-bold text-gray-500">Текст відгуку</label>
+                        <textarea class="review-text w-full border rounded border-gray-300 bg-white p-2 text-sm outline-none focus:border-black h-20 resize-none"></textarea>
+                    </div>
+                    <div class="col-span-1 md:col-span-2">
+                         <label class="text-[10px] uppercase font-bold text-gray-500 mb-1 block">Медіа (Фото/Відео)</label>
+                         <input type="file" class="review-file block w-full text-xs text-gray-500
+                            file:mr-4 file:py-2 file:px-4
+                            file:rounded-full file:border-0
+                            file:text-xs file:font-semibold
+                            file:bg-black file:text-white
+                            file:cursor-pointer hover:file:bg-gray-700
+                         ">
+                    </div>
+                </div>
+            `;
+            reviewsContainer.appendChild(div);
+        });
+
+        // --- UPLOAD HELPER ---
+        const uploadFile = async (file, path) => {
+            const storageRef = ref(storage, path);
+            await uploadBytes(storageRef, file);
+            return await getDownloadURL(storageRef);
+        };
+
+        // --- SUBMIT HANDLER ---
+        document.getElementById('productForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const title = document.getElementById('title').value;
+            const price = parseFloat(document.getElementById('price').value);
+            
+            if(!title || !price) {
+                showToast("Заповніть назву та ціну!", true);
+                return;
+            }
+
+            setLoading(true);
+
+            try {
+                const timestamp = Date.now();
+                const sanitizedTitle = title.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+
+                // 1. Upload Product Images
+                const imageUrls = [];
+                for (let i = 0; i < selectedProductFiles.length; i++) {
+                    const file = selectedProductFiles[i];
+                    const path = `products/${timestamp}_${sanitizedTitle}_${i}.${file.name.split('.').pop()}`;
+                    const url = await uploadFile(file, path);
+                    imageUrls.push(url);
+                }
+
+                // 2. Gather Attributes
+                const category = document.getElementById('category').value;
+                const videoId = document.getElementById('videoId').value;
+                const sizeCategory = document.getElementById('sizeCategory').value;
+                
+                const sizes = Array.from(document.querySelectorAll('input[name="sizes"]:checked')).map(cb => cb.value);
+                
+                const colors = [];
+                document.querySelectorAll('.color-row').forEach(row => {
+                    const name = row.querySelector('.color-name').value;
+                    const code = row.querySelector('.color-code').value;
+                    if(name) colors.push({ name, code });
+                });
+
+                // 3. Process Reviews
+                const reviews = [];
+                const reviewElements = document.querySelectorAll('.review-item');
+                
+                for (let i = 0; i < reviewElements.length; i++) {
+                    const el = reviewElements[i];
+                    const user = el.querySelector('.review-user').value || 'Клієнт';
+                    const rating = parseInt(el.querySelector('.review-rating').value);
+                    const text = el.querySelector('.review-text').value;
+                    const fileInput = el.querySelector('.review-file');
+                    
+                    let mediaUrl = null;
+                    let type = null;
+
+                    if (fileInput.files.length > 0) {
+                        const file = fileInput.files[0];
+                        const isVideo = file.type.startsWith('video/');
+                        type = isVideo ? 'video' : 'image';
+                        const path = `reviews/${timestamp}_rev_${i}.${file.name.split('.').pop()}`;
+                        mediaUrl = await uploadFile(file, path);
+                    }
+
+                    if (text || mediaUrl) {
+                        reviews.push({ user, rating, text, type, url: mediaUrl });
+                    }
+                }
+
+                // 4. Construct Object
+                const productData = {
+                    title,
+                    price,
+                    category,
+                    videoId: videoId || null,
+                    sizeCategory,
+                    sizes,
+                    colors, // Stores {name, code}
+                    images: imageUrls,
+                    reviews,
+                    createdAt: serverTimestamp()
+                };
+
+                // 5. Save to Firestore
+                await addDoc(collection(db, "products"), productData);
+
+                showToast("✅ Товар успішно збережено!");
+                
+                // Reset Form
+                document.getElementById('productForm').reset();
+                selectedProductFiles = [];
+                renderProductPreviews();
+                colorsContainer.innerHTML = '';
+                reviewsContainer.innerHTML = '<div class="text-center text-gray-400 py-4 text-sm italic" id="noReviewsMsg">Відгуків поки немає. Додайте перший!</div>';
+                window.scrollTo(0,0);
+
+            } catch (error) {
+                console.error("Error adding document: ", error);
+                showToast(`❌ Помилка: ${error.message}`, true);
+            } finally {
+                setLoading(false);
+            }
+        });
+
+    </script>
+</body>
+</html>
