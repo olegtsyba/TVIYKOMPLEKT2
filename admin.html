@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="uk">
 <head>
@@ -6,63 +7,140 @@
     <title>Admin Panel - TVIYKOMPLEKT</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/index.css">
+    <!-- Correct relative path to CSS for final build -->
+    <link rel="stylesheet" href="./assets/index.css">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: { sans: ['Montserrat', 'sans-serif'] },
+            colors: { primary: '#000000', secondary: '#ffffff' }
+          }
+        }
+      }
+    </script>
+    <style>
+        .loader {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #000;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { 
+            0% { transform: rotate(0deg); } 
+            100% { transform: rotate(360deg); } 
+        }
+    </style>
 </head>
-<body class="bg-gray-100 text-gray-800 antialiased min-h-screen">
+<body class="bg-gray-100 text-gray-800 antialiased min-h-screen pb-20">
 
     <!-- Notification Toast -->
-    <div id="toast" class="fixed top-5 right-5 z-50 transform translate-x-full transition-transform duration-300">
+    <div id="toast" class="fixed top-5 right-5 z-[60] transform translate-x-full transition-transform duration-300">
         <div class="bg-black text-white px-6 py-4 shadow-lg rounded flex items-center gap-3">
             <i class="fas fa-info-circle"></i>
             <span id="toast-msg" class="font-medium text-sm uppercase tracking-wide">Message</span>
         </div>
     </div>
 
-    <div class="max-w-5xl mx-auto p-6">
+    <!-- LOGIN SCREEN -->
+    <div id="login-screen" class="fixed inset-0 bg-gray-100 flex items-center justify-center z-50">
+        <div class="bg-white p-8 rounded-lg shadow-xl w-full max-w-md">
+            <h2 class="text-2xl font-bold mb-6 text-center uppercase tracking-wider">Вхід в Адмін-панель</h2>
+            <form id="loginForm" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-bold uppercase text-gray-500 mb-2">Email</label>
+                    <input type="email" id="loginEmail" class="w-full bg-gray-50 border border-gray-300 p-3 rounded focus:border-black outline-none" required>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold uppercase text-gray-500 mb-2">Пароль</label>
+                    <input type="password" id="loginPassword" class="w-full bg-gray-50 border border-gray-300 p-3 rounded focus:border-black outline-none" required>
+                </div>
+                <button type="submit" id="loginBtn" class="w-full bg-black text-white py-4 font-bold uppercase tracking-widest hover:bg-gray-800 transition flex justify-center items-center">
+                    Увійти
+                </button>
+                <p id="loginError" class="text-red-500 text-xs text-center hidden"></p>
+            </form>
+        </div>
+    </div>
+
+    <!-- MAIN DASHBOARD (Protected) -->
+    <div id="admin-dashboard" class="max-w-6xl mx-auto p-6 hidden">
         
         <!-- Header -->
         <header class="flex justify-between items-center mb-8">
             <div>
                 <h1 class="text-3xl font-bold tracking-tight text-black">ADMIN PANEL</h1>
-                <p class="text-sm text-gray-500 mt-1">Додавання нового товару до каталогу</p>
+                <p class="text-sm text-gray-500 mt-1">Управління контентом та товарами</p>
             </div>
-            <button onclick="window.location.reload()" class="text-sm text-gray-500 hover:text-black underline">
-                Скинути форму
-            </button>
+            <div class="flex items-center gap-4">
+                <button onclick="window.location.reload()" class="text-sm text-gray-500 hover:text-black underline">
+                    Оновити сторінку
+                </button>
+                <button id="logoutBtn" class="bg-red-50 text-red-600 px-4 py-2 text-xs font-bold uppercase rounded hover:bg-red-100 transition">
+                    Вийти
+                </button>
+            </div>
         </header>
 
-        <form id="productForm" class="space-y-8">
+        <!-- SECTION 1: SITE SETTINGS -->
+        <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-200 mb-8">
+            <div class="flex justify-between items-center mb-6 border-b pb-2">
+                <h2 class="text-lg font-bold uppercase tracking-wider">Налаштування сайту (Hero Section)</h2>
+                <button id="saveSettingsBtn" class="bg-gray-900 text-white px-4 py-2 text-xs font-bold uppercase rounded hover:bg-black transition flex items-center">Зберегти налаштування</button>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                    <label class="block text-xs font-bold uppercase text-gray-500 mb-2">Заголовок Логотипу</label>
+                    <input type="text" id="logoText" class="w-full bg-gray-50 border border-gray-300 p-3 rounded text-sm focus:border-black outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold uppercase text-gray-500 mb-2">Фонове фото (URL)</label>
+                    <input type="text" id="heroBackgroundUrl" class="w-full bg-gray-50 border border-gray-300 p-3 rounded text-sm focus:border-black outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold uppercase text-gray-500 mb-2">Підзаголовок (Subtitle)</label>
+                    <input type="text" id="heroSubtitle" class="w-full bg-gray-50 border border-gray-300 p-3 rounded text-sm focus:border-black outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold uppercase text-gray-500 mb-2">Головний Заголовок (Title)</label>
+                    <textarea id="heroTitle" class="w-full bg-gray-50 border border-gray-300 p-3 rounded text-sm focus:border-black outline-none h-20"></textarea>
+                </div>
+            </div>
+        </div>
 
-            <!-- 1. Основна інформація -->
-            <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
-                <h2 class="text-lg font-bold uppercase tracking-wider mb-6 border-b pb-2">1. Основна інформація</h2>
+        <!-- SECTION 2: PRODUCT FORM -->
+        <form id="productForm" class="space-y-8 mb-12">
+            <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-200 relative border-l-4 border-l-black">
+                <div class="flex justify-between items-center mb-6 border-b pb-2">
+                    <h2 class="text-lg font-bold uppercase tracking-wider" id="formTitle">Додати новий товар</h2>
+                    <button type="button" id="resetFormBtn" class="hidden text-xs text-red-500 underline uppercase font-bold">Скинути / Відмінити</button>
+                </div>
                 
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <!-- Title -->
-                    <div class="col-span-2">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div class="col-span-1 md:col-span-3">
                         <label class="block text-xs font-bold uppercase text-gray-500 mb-2">Назва товару</label>
                         <input type="text" id="title" required placeholder="Напр: MA лосини Verona" 
-                            class="w-full bg-gray-50 border border-gray-300 p-3 rounded focus:outline-none focus:border-black focus:ring-1 focus:ring-black transition">
+                            class="w-full bg-gray-50 border border-gray-300 p-3 rounded focus:border-black outline-none">
                     </div>
 
-                    <!-- Price -->
                     <div>
-                        <label class="block text-xs font-bold uppercase text-gray-500 mb-2">Ціна (UAH)</label>
+                        <label class="block text-xs font-bold uppercase text-gray-500 mb-2">Ціна (Актуальна)</label>
                         <input type="number" id="price" required placeholder="0" 
-                            class="w-full bg-gray-50 border border-gray-300 p-3 rounded focus:outline-none focus:border-black transition">
+                            class="w-full bg-gray-50 border border-gray-300 p-3 rounded focus:border-black outline-none">
                     </div>
 
-                    <!-- YouTube -->
-                    <div>
-                        <label class="block text-xs font-bold uppercase text-gray-500 mb-2">YouTube ID</label>
-                        <input type="text" id="videoId" placeholder="dQw4w9WgXcQ" 
-                            class="w-full bg-gray-50 border border-gray-300 p-3 rounded focus:outline-none focus:border-black transition">
+                     <div>
+                        <label class="block text-xs font-bold uppercase text-gray-500 mb-2 text-red-400">Стара ціна (для знижки)</label>
+                        <input type="number" id="oldPrice" placeholder="0" 
+                            class="w-full bg-gray-50 border border-gray-300 p-3 rounded focus:border-black outline-none">
                     </div>
 
-                    <!-- Category -->
                     <div>
                         <label class="block text-xs font-bold uppercase text-gray-500 mb-2">Категорія</label>
-                        <select id="category" class="w-full bg-gray-50 border border-gray-300 p-3 rounded focus:outline-none focus:border-black transition">
+                        <select id="category" class="w-full bg-gray-50 border border-gray-300 p-3 rounded focus:border-black outline-none">
                             <option value="Лосини">Лосини</option>
                             <option value="Топ">Топ</option>
                             <option value="Комплект">Комплект</option>
@@ -72,120 +150,143 @@
                         </select>
                     </div>
 
-                    <!-- Size Category -->
-                    <div>
-                        <label class="block text-xs font-bold uppercase text-gray-500 mb-2">Таблиця розмірів</label>
-                        <select id="sizeCategory" class="w-full bg-gray-50 border border-gray-300 p-3 rounded focus:outline-none focus:border-black transition">
+                     <div>
+                        <label class="block text-xs font-bold uppercase text-gray-500 mb-2">Категорія Розмірів</label>
+                        <select id="sizeCategory" class="w-full bg-gray-50 border border-gray-300 p-3 rounded focus:border-black outline-none">
                             <option value="default">Загальна</option>
-                            <option value="leggings">Лосини (leggings)</option>
-                            <option value="top">Топ (top)</option>
-                            <option value="set">Комплект (set)</option>
-                            <option value="bodysuit">Комбінезон (bodysuit)</option>
-                            <option value="rashguard">Рашгард</option>
+                            <option value="leggings">Лосини</option>
+                            <option value="top">Топ</option>
+                            <option value="set">Комплект</option>
+                            <option value="bodysuit">Комбінезон</option>
                         </select>
                     </div>
-                </div>
-            </div>
 
-            <!-- 2. Медіа (Фото товару) -->
-            <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
-                <h2 class="text-lg font-bold uppercase tracking-wider mb-6 border-b pb-2">2. Фото товару</h2>
+                    <div class="col-span-1 md:col-span-2">
+                        <label class="block text-xs font-bold uppercase text-gray-500 mb-2">YouTube ID (Optional)</label>
+                        <input type="text" id="videoId" placeholder="dQw4w9WgXcQ" 
+                            class="w-full bg-gray-50 border border-gray-300 p-3 rounded focus:border-black outline-none">
+                    </div>
+                </div>
+
+                <!-- Custom Size Chart Builder -->
+                <div class="mt-6 bg-gray-50 p-4 rounded border border-gray-200">
+                    <label class="block text-xs font-bold uppercase text-gray-900 mb-3">Кастомна Таблиця Розмірів (Опціонально)</label>
+                    <p class="text-xs text-gray-500 mb-2">Заповніть поля та натисніть "Додати рядок". Ця таблиця замінить стандартну категорію.</p>
+                    
+                    <div class="grid grid-cols-5 gap-2 mb-2">
+                        <input type="text" id="scSize" placeholder="Розмір (S)" class="text-xs p-2 border rounded">
+                        <input type="text" id="scBust" placeholder="Груди (88-92)" class="text-xs p-2 border rounded">
+                        <input type="text" id="scWaist" placeholder="Талія (60-65)" class="text-xs p-2 border rounded">
+                        <input type="text" id="scHips" placeholder="Стегна (90-95)" class="text-xs p-2 border rounded">
+                        <button type="button" id="addSizeRowBtn" class="bg-gray-800 text-white text-xs font-bold uppercase rounded hover:bg-black">Додати</button>
+                    </div>
+
+                    <!-- Size Chart Preview Table -->
+                    <div class="bg-white border border-gray-200 rounded overflow-hidden">
+                        <table class="w-full text-left text-xs">
+                            <thead class="bg-gray-100 font-bold text-gray-600">
+                                <tr>
+                                    <th class="p-2">Розмір</th>
+                                    <th class="p-2">Груди</th>
+                                    <th class="p-2">Талія</th>
+                                    <th class="p-2">Стегна</th>
+                                    <th class="p-2 w-10"></th>
+                                </tr>
+                            </thead>
+                            <tbody id="sizeChartTableBody">
+                                <!-- Rows will be injected here -->
+                                <tr><td colspan="5" class="p-2 text-center text-gray-400 italic">Рядків ще не додано</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Sizes Checkboxes -->
+                <div class="mt-6">
+                    <label class="block text-xs font-bold uppercase text-gray-500 mb-3">Доступні Розміри (для кнопок)</label>
+                    <div class="flex flex-wrap gap-4" id="sizesCheckboxes">
+                         <label class="inline-flex items-center cursor-pointer"><input type="checkbox" name="sizes" value="XS" class="form-checkbox text-black"><span class="ml-2 text-sm">XS</span></label>
+                         <label class="inline-flex items-center cursor-pointer"><input type="checkbox" name="sizes" value="S" checked class="form-checkbox text-black"><span class="ml-2 text-sm">S</span></label>
+                         <label class="inline-flex items-center cursor-pointer"><input type="checkbox" name="sizes" value="M" checked class="form-checkbox text-black"><span class="ml-2 text-sm">M</span></label>
+                         <label class="inline-flex items-center cursor-pointer"><input type="checkbox" name="sizes" value="L" checked class="form-checkbox text-black"><span class="ml-2 text-sm">L</span></label>
+                         <label class="inline-flex items-center cursor-pointer"><input type="checkbox" name="sizes" value="XL" class="form-checkbox text-black"><span class="ml-2 text-sm">XL</span></label>
+                         <label class="inline-flex items-center cursor-pointer"><input type="checkbox" name="sizes" value="XXL" class="form-checkbox text-black"><span class="ml-2 text-sm">XXL</span></label>
+                    </div>
+                </div>
+
+                <!-- Images -->
+                <div class="mt-6">
+                    <label class="block text-xs font-bold uppercase text-gray-500 mb-2">Фото товару</label>
+                    <div class="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:bg-gray-50 transition cursor-pointer relative">
+                        <input type="file" id="productImages" multiple accept="image/*" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer">
+                        <p class="text-sm text-gray-500">Натисніть або перетягніть фото</p>
+                    </div>
+                    <div id="imagePreviewContainer" class="grid grid-cols-4 md:grid-cols-6 gap-2 mt-4"></div>
+                </div>
+
+                <!-- REVIEWS MANAGEMENT -->
+                <div class="mt-8 border-t border-gray-100 pt-6">
+                     <h3 class="text-xs font-bold uppercase text-gray-500 mb-4">Відгуки клієнтів</h3>
+                     <div id="reviewsList" class="space-y-3 mb-4"></div>
+                     <div class="bg-gray-50 p-4 rounded border border-gray-200">
+                         <div class="grid grid-cols-2 gap-3 mb-2">
+                             <input type="text" id="reviewUser" placeholder="Ім'я клієнта" class="text-xs p-2 border rounded">
+                             <select id="reviewRating" class="text-xs p-2 border rounded">
+                                 <option value="5">★★★★★ (5)</option>
+                                 <option value="4">★★★★ (4)</option>
+                                 <option value="3">★★★ (3)</option>
+                             </select>
+                         </div>
+                         <textarea id="reviewText" placeholder="Текст відгуку" class="w-full text-xs p-2 border rounded mb-2 h-16"></textarea>
+                         <div class="flex items-center gap-2">
+                            <input type="file" id="reviewImage" accept="image/*" class="text-xs w-full">
+                            <button type="button" id="addReviewBtn" class="bg-gray-800 text-white px-4 py-2 text-xs uppercase font-bold rounded hover:bg-black whitespace-nowrap flex items-center">Додати відгук</button>
+                         </div>
+                     </div>
+                </div>
                 
-                <div class="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:bg-gray-50 transition cursor-pointer relative">
-                    <input type="file" id="productImages" multiple accept="image/*" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer">
-                    <div class="text-gray-400">
-                        <i class="fas fa-cloud-upload-alt text-4xl mb-3"></i>
-                        <p class="text-sm font-medium">Перетягніть фото сюди або клікніть</p>
-                        <p class="text-xs mt-1">Можна обрати декілька файлів</p>
-                    </div>
-                </div>
-                <!-- Preview Area -->
-                <div id="imagePreviewContainer" class="grid grid-cols-4 md:grid-cols-6 gap-4 mt-4"></div>
-            </div>
-
-            <!-- 3. Варіанти (Розміри та Кольори) -->
-            <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
-                <h2 class="text-lg font-bold uppercase tracking-wider mb-6 border-b pb-2">3. Варіанти</h2>
-                
-                <!-- Sizes -->
-                <div class="mb-6">
-                    <label class="block text-xs font-bold uppercase text-gray-500 mb-3">Розміри</label>
-                    <div class="flex flex-wrap gap-4">
-                        <label class="inline-flex items-center cursor-pointer">
-                            <input type="checkbox" name="sizes" value="XS" class="form-checkbox h-5 w-5 text-black rounded border-gray-300 focus:ring-black">
-                            <span class="ml-2 text-sm">XS</span>
-                        </label>
-                        <label class="inline-flex items-center cursor-pointer">
-                            <input type="checkbox" name="sizes" value="S" checked class="form-checkbox h-5 w-5 text-black rounded border-gray-300 focus:ring-black">
-                            <span class="ml-2 text-sm">S</span>
-                        </label>
-                        <label class="inline-flex items-center cursor-pointer">
-                            <input type="checkbox" name="sizes" value="M" checked class="form-checkbox h-5 w-5 text-black rounded border-gray-300 focus:ring-black">
-                            <span class="ml-2 text-sm">M</span>
-                        </label>
-                        <label class="inline-flex items-center cursor-pointer">
-                            <input type="checkbox" name="sizes" value="L" checked class="form-checkbox h-5 w-5 text-black rounded border-gray-300 focus:ring-black">
-                            <span class="ml-2 text-sm">L</span>
-                        </label>
-                        <label class="inline-flex items-center cursor-pointer">
-                            <input type="checkbox" name="sizes" value="XL" class="form-checkbox h-5 w-5 text-black rounded border-gray-300 focus:ring-black">
-                            <span class="ml-2 text-sm">XL</span>
-                        </label>
-                        <label class="inline-flex items-center cursor-pointer">
-                            <input type="checkbox" name="sizes" value="XXL" class="form-checkbox h-5 w-5 text-black rounded border-gray-300 focus:ring-black">
-                            <span class="ml-2 text-sm">XXL</span>
-                        </label>
-                    </div>
-                </div>
-
-                <!-- Colors -->
-                <div>
-                    <div class="flex justify-between items-center mb-3">
-                        <label class="block text-xs font-bold uppercase text-gray-500">Кольори</label>
-                        <button type="button" id="addColorBtn" class="text-xs bg-gray-200 hover:bg-gray-300 px-3 py-1 rounded transition">
-                            <i class="fas fa-plus mr-1"></i> Додати
-                        </button>
-                    </div>
-                    <div id="colorsContainer" class="space-y-3">
-                        <!-- Dynamic Color Rows -->
-                    </div>
-                </div>
-            </div>
-
-            <!-- 4. Відгуки -->
-            <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
-                <div class="flex justify-between items-center mb-6 border-b pb-2">
-                    <h2 class="text-lg font-bold uppercase tracking-wider">4. Відгуки клієнтів</h2>
-                    <button type="button" id="addReviewBtn" class="bg-black text-white px-4 py-2 text-xs font-bold uppercase tracking-wide hover:bg-gray-800 transition rounded-sm shadow-md">
-                        <i class="fas fa-plus mr-2"></i> Додати відгук
+                <div class="mt-8">
+                     <button type="submit" id="submitBtn" class="w-full bg-black text-white py-4 text-sm font-bold uppercase tracking-widest hover:bg-gray-900 transition shadow-xl rounded-sm flex justify-center items-center gap-2">
+                        <span>Зберегти товар</span>
                     </button>
                 </div>
-
-                <div id="reviewsContainer" class="space-y-4">
-                    <!-- Dynamic Review Cards -->
-                    <div class="text-center text-gray-400 py-4 text-sm italic" id="noReviewsMsg">
-                        Відгуків поки немає. Додайте перший!
-                    </div>
-                </div>
             </div>
-
-            <!-- Submit Action -->
-            <div class="sticky bottom-4 z-10">
-                <button type="submit" id="submitBtn" class="w-full bg-black text-white py-4 text-sm font-bold uppercase tracking-widest hover:bg-gray-900 transition shadow-xl rounded-sm flex justify-center items-center gap-2">
-                    <span>Зберегти товар</span>
-                </button>
-            </div>
-
         </form>
+
+        <!-- SECTION 3: PRODUCT LIST -->
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+             <div class="p-6 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
+                <h2 class="text-lg font-bold uppercase tracking-wider">Список товарів</h2>
+                <div class="text-xs text-gray-500">Всього: <span id="productCount">0</span></div>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left text-sm">
+                    <thead class="bg-gray-100 text-gray-600 uppercase text-xs">
+                        <tr>
+                            <th class="p-4">Фото</th>
+                            <th class="p-4">Назва</th>
+                            <th class="p-4">Ціна</th>
+                            <th class="p-4">ID</th>
+                            <th class="p-4 text-right">Дії</th>
+                        </tr>
+                    </thead>
+                    <tbody id="productsTableBody" class="divide-y divide-gray-100">
+                         <tr><td colspan="5" class="p-8 text-center text-gray-400">Завантаження...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
     </div>
 
-    <!-- FIREBASE MODULES -->
+    <!-- FIREBASE & LOGIC -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
-        import { getFirestore, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
+        import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js";
+        import { getFirestore, collection, addDoc, doc, getDoc, setDoc, updateDoc, deleteDoc, onSnapshot, serverTimestamp, query, orderBy } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
         import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-storage.js";
 
-        // CONFIGURATION
+        // CONFIG
         const firebaseConfig = {
             apiKey: "AIzaSyBcnbheQccvMjAX_xCFGaPy1RlOTE_UPm8",
             authDomain: "tviykomplekt-88100.firebaseapp.com",
@@ -196,246 +297,533 @@
             measurementId: "G-C862G7Z28Y"
         };
 
-        // INITIALIZE FIREBASE
         const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
         const db = getFirestore(app);
         const storage = getStorage(app);
 
-        // --- UI UTILS ---
+        // --- AUTH LOGIC ---
+        const loginScreen = document.getElementById('login-screen');
+        const adminDashboard = document.getElementById('admin-dashboard');
+        const loginForm = document.getElementById('loginForm');
+        const loginBtn = document.getElementById('loginBtn');
+        const loginError = document.getElementById('loginError');
 
+        // Check Auth Status
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                // User is signed in
+                loginScreen.classList.add('hidden');
+                adminDashboard.classList.remove('hidden');
+                initAdminPanel();
+            } else {
+                // User is signed out
+                loginScreen.classList.remove('hidden');
+                adminDashboard.classList.add('hidden');
+            }
+        });
+
+        // Login Handler
+        loginForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            toggleLoading('loginBtn', true, 'Вхід');
+            loginError.classList.add('hidden');
+
+            const email = document.getElementById('loginEmail').value;
+            const password = document.getElementById('loginPassword').value;
+
+            try {
+                await signInWithEmailAndPassword(auth, email, password);
+                // Redirect handled by onAuthStateChanged
+            } catch (error) {
+                console.error(error);
+                loginError.innerText = "Помилка: " + error.code;
+                loginError.classList.remove('hidden');
+            } finally {
+                toggleLoading('loginBtn', false, 'Увійти');
+            }
+        });
+
+        // Logout Handler
+        document.getElementById('logoutBtn').addEventListener('click', () => {
+            signOut(auth).catch(console.error);
+        });
+
+        // --- STATIC PRODUCTS (LEGACY SUPPORT) ---
+        const STATIC_PRODUCTS = [
+            { id: 1, title: "RA рашгард на блискавці", price: 899, images: ["https://tviykomplekt.api.keycrm.app/file-storage/thumbnails/tviykomplekt/uploads/2025-03-06/uEz3DWtfCnxEWERGDaSB7U6peslG01br.JPG"], sizes: ["S", "M", "L"] },
+            { id: 2, title: "MA комплект (рашгард + лосини) Verona", price: 1499, images: ["https://tviykomplekt.api.keycrm.app/file-storage/thumbnails/tviykomplekt/uploads/2025-04-11/VGU1A2hGgZzkaNgtD5DJ9flcFmrXnnsX.PNG"], sizes: ["S", "M", "L"] },
+            { id: 3, title: "MA лосини Verona з 3d push-up", price: 799, images: ["https://tviykomplekt.api.keycrm.app/file-storage/thumbnails/tviykomplekt/uploads/2025-08-28/Usgrk89giBertxuPCuZYmKQ75hhL1S6E.JPG"], sizes: ["S", "M", "L", "XL"] },
+            { id: 4, title: "KB комбінезон без рукавів (модель 2 )", price: 1599, images: ["https://tviykomplekt.api.keycrm.app/file-storage/thumbnails/tviykomplekt/uploads/2025-03-06/2L8hLaq63ksIprjxL0AOqRTCGSYWJjzd.jpg"], sizes: ["S", "M", "L", "XL"] },
+            { id: 6, title: "BE лосини безшовні без ефекту пуш-ап", price: 645, images: ["https://tviykomplekt.api.keycrm.app/file-storage/thumbnails/tviykomplekt/uploads/2025-09-01/HibsuNQJwECh24OziAZg0AAEAScmWK4y.jpeg"], sizes: ["S", "M", "L"] },
+            { id: 8, title: "R рашгард", price: 899, images: ["https://tviykomplekt.api.keycrm.app/file-storage/thumbnails/tviykomplekt/uploads/2025-03-06/uEz3DWtfCnxEWERGDaSB7U6peslG01br.JPG"], sizes: ["M", "S", "L"] },
+            { id: 9, title: "KK Лосини з push-up", price: 749, images: ["https://tviykomplekt.api.keycrm.app/file-storage/thumbnails/tviykomplekt/uploads/2025-08-29/IWJRZ1H1AxX4mIBwNYNVqptcBtzOEJAW.jpeg"], sizes: ["S", "L"] },
+            { id: 10, title: "KK Топ", price: 599, images: ["https://tviykomplekt.api.keycrm.app/file-storage/thumbnails/tviykomplekt/uploads/2025-08-29/fmN0Yq7uLPGYPomrU0hqhPLG9pRexCV1.jpeg"], sizes: ["S", "L"] },
+            { id: 13, title: "KL Лосини класичні з push-up", price: 749, images: ["https://tviykomplekt.api.keycrm.app/file-storage/thumbnails/tviykomplekt/uploads/2025-05-09/joUNLaaJtwXxFz0BUU3hDMBXxDShiDOK.JPG"], sizes: ["S", "M", "L", "XL"] },
+            { id: 14, title: "KR Комбінезон із довгим рукавом", price: 1799, images: ["https://tviykomplekt.api.keycrm.app/file-storage/thumbnails/tviykomplekt/uploads/2025-03-27/85fSTSeQQozgZF95QR06mkwqwUqmKyhq.jpeg"], sizes: ["S", "M", "L"] },
+            { id: 15, title: "QA Топ перехресний перед", price: 799, images: ["https://tviykomplekt.api.keycrm.app/file-storage/thumbnails/tviykomplekt/uploads/2025-03-27/o5xflMlYIv21XwjWVs0vrVJWFudRiFLl.jpeg"], sizes: ["S", "M", "L", "XL", "XXL"] },
+            { id: 16, title: "QC Топ із перехресною спинкою", price: 749, images: ["https://tviykomplekt.api.keycrm.app/file-storage/thumbnails/tviykomplekt/uploads/2025-03-27/sGXAV78PCCQcyYhTaqJoCtdpklW1JKt9.jpeg"], sizes: ["S", "M", "L", "XL", "XXL"] },
+            { id: 17, title: "SQ Лосини з push-up з V-подібним поясом", price: 899, images: ["https://tviykomplekt.api.keycrm.app/file-storage/thumbnails/tviykomplekt/uploads/2025-04-01/sBMKXvzkVrrrcLv0wcj1PisJK4IdplNj.JPEG"], sizes: ["S", "M", "L", "XL"] },
+            { id: 18, title: "KV Комбенізон без пушап, зі швами та зйомними чашками", price: 1799, images: ["https://tviykomplekt.api.keycrm.app/file-storage/thumbnails/tviykomplekt/uploads/2025-04-09/OAFAw5qbgrrFUmUspmvfHjPzBxcYkb6J.jpg"], sizes: ["S", "M", "L"] },
+            { id: 20, title: "RB футболка на блискавці", price: 699, images: ["https://tviykomplekt.api.keycrm.app/file-storage/thumbnails/tviykomplekt/uploads/2025-08-28/1IvPfRldHkwekEhh3HPwwGYpRxiOlNO0.JPG"], sizes: ["S", "L"] },
+            { id: 21, title: "RU Лосини у рубчик з push-up", price: 750, images: ["https://tviykomplekt.api.keycrm.app/file-storage/thumbnails/tviykomplekt/uploads/2025-08-29/YKl0uS357M3FULESjVPoR1BdFYS9f0xY.jpeg"], sizes: ["S", "M", "L"] },
+            { id: 22, title: "MA рашгард Verona", price: 699, images: ["https://tviykomplekt.api.keycrm.app/file-storage/thumbnails/tviykomplekt/uploads/2025-04-11/qWHr5rcc60bqIWEoDB0yWVS2iOtZDD19.jpeg"], sizes: ["S", "M", "L"] },
+            { id: 23, title: "MS комплект (футболка + вело) Verona", price: 1299, images: ["https://tviykomplekt.api.keycrm.app/file-storage/thumbnails/tviykomplekt/uploads/2025-04-11/VGU1A2hGgZzkaNgtD5DJ9flcFmrXnnsX.PNG"], sizes: ["S", "M", "L"] },
+            { id: 66, title: "MS велоcипедки Verona", price: 699, images: ["https://tviykomplekt.api.keycrm.app/file-storage/remote?url=https%3A%2F%2Ftviykomplekt.api.keycrm.app%2Ffile-storage%2Fthumbnails%2Ftviykomplekt%2Fuploads%2F2025-04-11%2FQxlQHPJBzFxscRlgM7iaYQZUGCHqghZg.jpg"], sizes: ["S", "M", "L"] },
+            { id: 71, title: "KN Шовний напівкомбенізон без пушап", price: 1499, images: ["https://tviykomplekt.api.keycrm.app/file-storage/thumbnails/tviykomplekt/uploads/2025-04-11/hgtEbgirz7eXXoU4QLMiTMU7cQv4V6mR.jpg"], sizes: ["S", "M", "L"] },
+            { id: 75, title: "MS футболка Verona", price: 699, images: ["https://tviykomplekt.api.keycrm.app/file-storage/thumbnails/tviykomplekt/uploads/2025-04-11/kh3vbfizXO5KWTzeSX0TfczWzJSIuUFn.jpg"], sizes: ["S", "M", "L"] },
+            { id: 76, title: "RU Футболка у рубчик", price: 599, images: ["https://tviykomplekt.api.keycrm.app/file-storage/thumbnails/tviykomplekt/uploads/2025-08-29/XDDf3EBPeE9ua6bPbtLLgfZkKgEMnGIo.jpeg"], sizes: ["S", "M", "L"] },
+            { id: 77, title: "FD Футболка подовжена приталена", price: 799, images: ["https://tviykomplekt.api.keycrm.app/file-storage/thumbnails/tviykomplekt/uploads/2025-08-29/j0NdsFwmlELg4kQtuSLJ3KJUrch6n6uc.jpeg"], sizes: ["S", "M", "L"] },
+            { id: 78, title: "WV Комплект WAVE (вело + топ)", price: 1599, images: ["https://tviykomplekt.api.keycrm.app/file-storage/thumbnails/tviykomplekt/uploads/2025-05-09/g8a3qx7Nlq8lBHF68z48TJoxYuM1Bgou.jpeg"], sizes: ["S", "M", "L"] },
+            { id: 80, title: "KS напівкомбінезон із закритою спинкою", price: 1499, images: ["https://tviykomplekt.api.keycrm.app/file-storage/thumbnails/tviykomplekt/uploads/2025-05-09/8pO62aUF30HsY8Hvu4LmBBJVbXSHxIu7.JPG"], sizes: ["S", "M", "L"] },
+            { id: 83, title: "SQ Велосипедки з V-подібним поясом", price: 699, images: ["https://tviykomplekt.api.keycrm.app/file-storage/thumbnails/tviykomplekt/uploads/2025-05-09/wQ4GCu96oa3dWq0bMRJIpkrThw7PVVzv.jpeg"], sizes: ["S", "M", "L"] },
+            { id: 84, title: "KP напівкомбінезон майкою", price: 1499, images: ["https://tviykomplekt.api.keycrm.app/file-storage/thumbnails/tviykomplekt/uploads/2025-07-04/i8OtbjUydE6jBjb809LbkZULdf1V7y8j.PNG"], sizes: ["S", "L", "M"] },
+            { id: 85, title: "LB Лосини без push-up \"Naked\"", price: 799, images: ["https://tviykomplekt.api.keycrm.app/file-storage/thumbnails/tviykomplekt/uploads/2025-08-28/idZ1rBcz11Wli0oNMG07Ox85MFFF7b6o.JPG"], sizes: ["S", "M", "L"] },
+            { id: 86, title: "WV лосини без push-up \"WAVE\"", price: 799, images: ["https://tviykomplekt.api.keycrm.app/file-storage/thumbnails/tviykomplekt/uploads/2025-08-28/JoRx3cYW2SQOVaIGbwYDoPtFbSzUhemK.JPG"], sizes: ["M", "L", "S"] },
+            { id: 94, title: "LI Лосини V-push-up", price: 799, images: ["https://tviykomplekt.api.keycrm.app/file-storage/thumbnails/tviykomplekt/uploads/2025-09-01/8gUL58c0AhNLObGJdAyB9n7nNoTtvdjV.jpeg"], sizes: ["S", "M", "L"] },
+            { id: 96, title: "WV Топ \"WAVE\"", price: 799, images: ["https://tviykomplekt.api.keycrm.app/file-storage/thumbnails/tviykomplekt/uploads/2025-09-01/yajW2IUqXh8KGJ0FSp2NGUUWcKehDTgn.jpeg"], sizes: ["S", "M", "L"] },
+            { id: 99, title: "LB Майка »Naked\"", price: 799, images: ["https://tviykomplekt.api.keycrm.app/file-storage/thumbnails/tviykomplekt/uploads/2025-09-01/x65hUUEayvVhOJR73PbWCjgtjWc3PKXf.jpeg"], sizes: ["S", "M", "L"] },
+            { id: 100, title: "LB Велосипедки »Naked\"", price: 799, images: ["https://tviykomplekt.api.keycrm.app/file-storage/thumbnails/tviykomplekt/uploads/2025-09-01/YI2ZJtoLZgGUrh558M8oOhtHYKU0svpS.jpeg"], sizes: ["S", "M", "L"] },
+            { id: 101, title: "LB Футболка вкорочена зі зйомними чашками", price: 799, images: ["https://tviykomplekt.api.keycrm.app/file-storage/thumbnails/tviykomplekt/uploads/2025-09-01/e08vCDdpvI8KVwzRyxbU7tHotSKrLV8d.jpeg"], sizes: ["S", "M", "L"] },
+            { id: 102, title: "LB Футболка подовжена приталена \"Naked\"", price: 799, images: ["https://tviykomplekt.api.keycrm.app/file-storage/thumbnails/tviykomplekt/uploads/2025-09-01/dmZqnAIl5CxQaGfZxL7BFSqZcacrjajp.jpeg"], sizes: ["S", "M", "L"] },
+            { id: 103, title: "LB Кроп-топ із довгим рукавом \"Naked\"", price: 799, images: ["https://tviykomplekt.api.keycrm.app/file-storage/thumbnails/tviykomplekt/uploads/2025-09-01/j5mhhxZ6HYaOt5GdCDn5eNC4jnzbDYIT.jpeg"], sizes: ["S", "M", "L"] },
+            { id: 104, title: "LВ Лосини з push-up ефектом \"Naked\"", price: 999, images: ["https://tviykomplekt.api.keycrm.app/file-storage/thumbnails/tviykomplekt/uploads/2025-11-01/DixTUrV5VY8iMsWk406D8dQxYdgMtfNG.jpeg"], sizes: ["S", "M", "L"] },
+            { id: 105, title: "RI Лосини у рубчик без push-up", price: 740, images: ["https://tviykomplekt.api.keycrm.app/file-storage/thumbnails/tviykomplekt/uploads/2025-09-03/mT4VHOsBbW3A6IgzAEV9Ck7LMZLZ74oz.jpeg"], sizes: ["S", "M", "L"] },
+            { id: 106, title: "TW Футболка оверсайз", price: 699, images: ["https://tviykomplekt.api.keycrm.app/file-storage/thumbnails/tviykomplekt/uploads/2025-09-04/bmYT6tLbzUp6NsbAsaDWSoKaB2Romuf9.jpeg"], sizes: ["S", "M", "L", "XL"] },
+            { id: 107, title: "TZ Топ із застібкою", price: 799, images: ["https://tviykomplekt.api.keycrm.app/file-storage/thumbnails/tviykomplekt/uploads/2025-09-10/q8o1YgvP3i8WxHrndtFe0514nElmE7MV.jpeg"], sizes: ["S", "M", "L", "XL", "XXL"] },
+            { id: 108, title: "KS комбінезон із закритою спинкою короткий рукав", price: 1699, images: ["https://tviykomplekt.api.keycrm.app/file-storage/thumbnails/tviykomplekt/uploads/2025-09-11/bf5E03IvhT80RVgUNt2SgyAIAau3GZK2.jpeg"], sizes: ["S", "M", "L"] },
+            { id: 109, title: "KS комбінезон із закритою спинкою довгий рукав", price: 1599, images: ["https://tviykomplekt.api.keycrm.app/file-storage/thumbnails/tviykomplekt/uploads/2025-09-11/k50zBhc4mVGRGjsyobXmUBDThRdP1saP.jpeg"], sizes: ["S", "M", "L"] },
+            { id: 111, title: "KF Комбінезон утеплений на флісі", price: 1699, images: ["https://tviykomplekt.api.keycrm.app/file-storage/thumbnails/tviykomplekt/uploads/2025-11-01/77SYo5xzrQmO3WrcCHf2DJtEkANOtbxt.jpeg"], sizes: ["S", "M", "L"] },
+            { id: 112, title: "KX Комбінезон зі швами та закритою спинкою", price: 1799, images: ["https://tviykomplekt.api.keycrm.app/file-storage/thumbnails/tviykomplekt/uploads/2025-09-30/nFqqZmyoQuzBPeH2qaC8ftbnaKB0ft1Q.jpeg"], sizes: ["S", "L", "M"] },
+            { id: 114, title: "LS лосини утеплені на хутрі", price: 699, images: ["https://tviykomplekt.api.keycrm.app/file-storage/thumbnails/tviykomplekt/uploads/2025-11-01/qUBQZjfViboD17T52gknDT04KVquQUCv.jpeg"], sizes: ["S", "M", "L"] },
+            { id: 115, title: "LF Лосини утеплені мікрофліс", price: 899, images: ["https://tviykomplekt.api.keycrm.app/file-storage/thumbnails/tviykomplekt/uploads/2025-11-08/kTecEN5vWCI970K9qwTZQSgcsImbc7c3.jpeg"], sizes: ["S", "M", "L"] },
+            { id: 116, title: "TB термобілизна", price: 1299, images: ["https://tviykomplekt.api.keycrm.app/file-storage/thumbnails/tviykomplekt/uploads/2025-11-01/gvPBErhj4BKO7LCYoM5eWHoPjWdL38wc.jpeg"], sizes: ["S", "M", "L", "XL"] },
+            { id: 117, title: "HI Лосини на хутрі Італія", price: 749, images: ["https://tviykomplekt.api.keycrm.app/file-storage/thumbnails/tviykomplekt/uploads/2025-11-13/f76S8vLAyl1XmNZtDZwdcWZw4I4Bdq2g.jpeg"], sizes: ["S", "M", "L"] }
+        ];
+
+        // STATE
+        let editingProductId = null;
+        let selectedFiles = [];
+        let existingImageUrls = []; 
+        let currentReviews = []; 
+        let currentSizeChartRows = []; // Array of {size, bust, waist, hips}
+        let allProducts = [];
+        let hasInitialized = false;
+
+        // UI HELPERS
         const showToast = (msg, isError = false) => {
             const toast = document.getElementById('toast');
             const toastMsg = document.getElementById('toast-msg');
             const wrapper = toast.firstElementChild;
-            
             toastMsg.innerText = msg;
             wrapper.className = `px-6 py-4 shadow-lg rounded flex items-center gap-3 ${isError ? 'bg-red-600 text-white' : 'bg-black text-white'}`;
-            
             toast.classList.remove('translate-x-full');
             setTimeout(() => toast.classList.add('translate-x-full'), 3000);
         };
 
-        const setLoading = (loading) => {
-            const btn = document.getElementById('submitBtn');
-            if (loading) {
-                btn.disabled = true;
-                btn.innerHTML = '<div class="loader"></div><span>Збереження...</span>';
-                btn.classList.add('opacity-75');
-            } else {
-                btn.disabled = false;
-                btn.innerHTML = '<span>Зберегти товар</span>';
-                btn.classList.remove('opacity-75');
+        const toggleLoading = (btnId, isLoading, text) => {
+            const btn = document.getElementById(btnId);
+            if(btn) {
+                if(isLoading) {
+                    btn.disabled = true;
+                    btn.innerHTML = `<div class="loader inline-block mr-2"></div> ${text}...`;
+                    btn.classList.add('opacity-70');
+                } else {
+                    btn.disabled = false;
+                    btn.innerText = text;
+                    btn.classList.remove('opacity-70');
+                }
             }
         };
 
-        // --- LOGIC: PRODUCT IMAGES ---
-        const productInput = document.getElementById('productImages');
-        const previewContainer = document.getElementById('imagePreviewContainer');
-        let selectedProductFiles = []; // Array to store actual File objects
+        // --- INIT ADMIN PANEL FUNCTION ---
+        const initAdminPanel = () => {
+            if (hasInitialized) return;
+            hasInitialized = true;
+            loadSettings();
+            subscribeToProducts();
+        };
 
-        productInput.addEventListener('change', (e) => {
-            const files = Array.from(e.target.files);
-            selectedProductFiles = [...selectedProductFiles, ...files];
-            renderProductPreviews();
+        // --- 1. SITE SETTINGS LOGIC ---
+        const loadSettings = async () => {
+            try {
+                const docRef = doc(db, "settings", "site_content");
+                const docSnap = await getDoc(docRef);
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    document.getElementById('logoText').value = data.logoText || '';
+                    document.getElementById('heroBackgroundUrl').value = data.heroBackgroundUrl || '';
+                    document.getElementById('heroTitle').value = data.heroTitle || '';
+                    document.getElementById('heroSubtitle').value = data.heroSubtitle || '';
+                }
+            } catch (e) {
+                console.error("Error loading settings", e);
+            }
+        };
+
+        document.getElementById('saveSettingsBtn').addEventListener('click', async () => {
+            toggleLoading('saveSettingsBtn', true, 'Збереження');
+            try {
+                const data = {
+                    logoText: document.getElementById('logoText').value,
+                    heroBackgroundUrl: document.getElementById('heroBackgroundUrl').value,
+                    heroTitle: document.getElementById('heroTitle').value,
+                    heroSubtitle: document.getElementById('heroSubtitle').value,
+                    updatedAt: serverTimestamp()
+                };
+                await setDoc(doc(db, "settings", "site_content"), data, { merge: true });
+                showToast("✅ Налаштування оновлено!");
+            } catch (e) {
+                showToast("❌ Помилка збереження", true);
+            } finally {
+                toggleLoading('saveSettingsBtn', false, 'Зберегти налаштування');
+            }
         });
 
-        const renderProductPreviews = () => {
-            previewContainer.innerHTML = '';
-            selectedProductFiles.forEach((file, index) => {
+        // --- 2. SIZE CHART BUILDER LOGIC ---
+        const renderSizeChartTable = () => {
+            const tbody = document.getElementById('sizeChartTableBody');
+            tbody.innerHTML = '';
+            
+            if (currentSizeChartRows.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" class="p-2 text-center text-gray-400 italic">Рядків ще не додано</td></tr>';
+                return;
+            }
+
+            currentSizeChartRows.forEach((row, idx) => {
+                const tr = document.createElement('tr');
+                tr.className = "border-b border-gray-100 last:border-0";
+                tr.innerHTML = `
+                    <td class="p-2">${row.size}</td>
+                    <td class="p-2">${row.bust}</td>
+                    <td class="p-2">${row.waist}</td>
+                    <td class="p-2">${row.hips}</td>
+                    <td class="p-2 text-right">
+                        <button type="button" onclick="window.removeSizeRow(${idx})" class="text-red-500 hover:text-black">×</button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        };
+
+        document.getElementById('addSizeRowBtn').addEventListener('click', () => {
+            const size = document.getElementById('scSize').value.trim();
+            const bust = document.getElementById('scBust').value.trim();
+            const waist = document.getElementById('scWaist').value.trim();
+            const hips = document.getElementById('scHips').value.trim();
+
+            if (!size) {
+                showToast("Вкажіть розмір", true);
+                return;
+            }
+
+            currentSizeChartRows.push({ size, bust, waist, hips });
+            
+            // Clear inputs
+            document.getElementById('scSize').value = '';
+            document.getElementById('scBust').value = '';
+            document.getElementById('scWaist').value = '';
+            document.getElementById('scHips').value = '';
+            
+            renderSizeChartTable();
+        });
+
+        window.removeSizeRow = (idx) => {
+            currentSizeChartRows.splice(idx, 1);
+            renderSizeChartTable();
+        };
+
+        // --- 3. PRODUCT CRUD LOGIC ---
+
+        // Image Handling
+        document.getElementById('productImages').addEventListener('change', (e) => {
+            const files = Array.from(e.target.files);
+            selectedFiles = [...selectedFiles, ...files];
+            renderPreviews();
+        });
+
+        const renderPreviews = () => {
+            const container = document.getElementById('imagePreviewContainer');
+            container.innerHTML = '';
+            
+            // Show existing URLs if editing
+            existingImageUrls.forEach((url, idx) => {
+                const div = document.createElement('div');
+                div.className = 'relative aspect-[4/5] bg-gray-100 rounded overflow-hidden group';
+                div.innerHTML = `
+                    <img src="${url}" class="w-full h-full object-cover">
+                    <button type="button" class="absolute top-1 right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition"
+                        onclick="window.removeExistingImage(${idx})">×</button>
+                `;
+                container.appendChild(div);
+            });
+
+            // Show new files
+            selectedFiles.forEach((file, idx) => {
                 const reader = new FileReader();
                 reader.onload = (e) => {
                     const div = document.createElement('div');
-                    div.className = 'relative aspect-[4/5] bg-gray-100 rounded overflow-hidden border border-gray-200 group';
+                    div.className = 'relative aspect-[4/5] bg-gray-100 rounded overflow-hidden group border-2 border-green-400';
                     div.innerHTML = `
                         <img src="${e.target.result}" class="w-full h-full object-cover">
-                        <button type="button" onclick="removeProductImage(${index})" class="absolute top-1 right-1 bg-white rounded-full p-1 text-red-500 shadow-sm opacity-0 group-hover:opacity-100 transition">
-                            <i class="fas fa-times"></i>
-                        </button>
+                        <button type="button" class="absolute top-1 right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition"
+                            onclick="window.removeNewFile(${idx})">×</button>
                     `;
-                    previewContainer.appendChild(div);
+                    container.appendChild(div);
                 };
                 reader.readAsDataURL(file);
             });
         };
 
-        window.removeProductImage = (index) => {
-            selectedProductFiles.splice(index, 1);
-            renderProductPreviews();
-        };
+        window.removeExistingImage = (idx) => { existingImageUrls.splice(idx, 1); renderPreviews(); };
+        window.removeNewFile = (idx) => { selectedFiles.splice(idx, 1); renderPreviews(); };
 
-        // --- LOGIC: COLORS ---
-        const colorsContainer = document.getElementById('colorsContainer');
-        
-        document.getElementById('addColorBtn').addEventListener('click', () => {
-            const div = document.createElement('div');
-            div.className = 'flex items-center gap-3 bg-gray-50 p-2 rounded border border-gray-200 color-row animate-fade-in';
-            div.innerHTML = `
-                <div class="flex-grow">
-                    <input type="text" placeholder="Назва кольору (напр. Хакі)" class="w-full bg-transparent text-sm p-1 outline-none color-name">
-                </div>
-                <input type="color" class="w-8 h-8 rounded cursor-pointer border-none color-code" value="#000000">
-                <button type="button" class="text-gray-400 hover:text-red-500 px-2" onclick="this.parentElement.remove()">
-                    <i class="fas fa-trash-alt"></i>
-                </button>
-            `;
-            colorsContainer.appendChild(div);
-        });
+        // --- 4. REVIEWS LOGIC ---
 
-        // --- LOGIC: REVIEWS ---
-        const reviewsContainer = document.getElementById('reviewsContainer');
-        
-        document.getElementById('addReviewBtn').addEventListener('click', () => {
-            document.getElementById('noReviewsMsg').style.display = 'none';
+        const renderReviewsList = () => {
+            const container = document.getElementById('reviewsList');
+            container.innerHTML = '';
             
-            const div = document.createElement('div');
-            div.className = 'review-item bg-gray-50 p-4 rounded border border-gray-200 relative';
-            div.innerHTML = `
-                <button type="button" class="absolute top-2 right-2 text-gray-300 hover:text-red-500" onclick="this.parentElement.remove()">
-                    <i class="fas fa-times"></i>
-                </button>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                        <label class="text-[10px] uppercase font-bold text-gray-500">Ім'я клієнта</label>
-                        <input type="text" class="review-user w-full border-b border-gray-300 bg-transparent py-1 text-sm outline-none focus:border-black" placeholder="Ім'я">
-                    </div>
-                    <div>
-                        <label class="text-[10px] uppercase font-bold text-gray-500">Оцінка</label>
-                        <select class="review-rating w-full border-b border-gray-300 bg-transparent py-1 text-sm outline-none">
-                            <option value="5">⭐⭐⭐⭐⭐ (5)</option>
-                            <option value="4">⭐⭐⭐⭐ (4)</option>
-                            <option value="3">⭐⭐⭐ (3)</option>
-                            <option value="2">⭐⭐ (2)</option>
-                            <option value="1">⭐ (1)</option>
-                        </select>
-                    </div>
-                    <div class="col-span-1 md:col-span-2">
-                        <label class="text-[10px] uppercase font-bold text-gray-500">Текст відгуку</label>
-                        <textarea class="review-text w-full border rounded border-gray-300 bg-white p-2 text-sm outline-none focus:border-black h-20 resize-none"></textarea>
-                    </div>
-                    <div class="col-span-1 md:col-span-2">
-                         <label class="text-[10px] uppercase font-bold text-gray-500 mb-1 block">Медіа (Фото/Відео)</label>
-                         <input type="file" class="review-file block w-full text-xs text-gray-500
-                            file:mr-4 file:py-2 file:px-4
-                            file:rounded-full file:border-0
-                            file:text-xs file:font-semibold
-                            file:bg-black file:text-white
-                            file:cursor-pointer hover:file:bg-gray-700
-                         ">
-                    </div>
-                </div>
-            `;
-            reviewsContainer.appendChild(div);
-        });
-
-        // --- UPLOAD HELPER ---
-        const uploadFile = async (file, path) => {
-            const storageRef = ref(storage, path);
-            await uploadBytes(storageRef, file);
-            return await getDownloadURL(storageRef);
-        };
-
-        // --- SUBMIT HANDLER ---
-        document.getElementById('productForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            
-            const title = document.getElementById('title').value;
-            const price = parseFloat(document.getElementById('price').value);
-            
-            if(!title || !price) {
-                showToast("Заповніть назву та ціну!", true);
+            if (currentReviews.length === 0) {
+                container.innerHTML = '<p class="text-xs text-gray-400 italic">Немає відгуків</p>';
                 return;
             }
 
-            setLoading(true);
+            currentReviews.forEach((review, idx) => {
+                const div = document.createElement('div');
+                div.className = "bg-gray-50 border border-gray-200 p-2 rounded flex justify-between items-start";
+                div.innerHTML = `
+                    <div class="text-xs">
+                        <div class="font-bold">${review.user} <span class="text-yellow-500 ml-1">★ ${review.rating}</span></div>
+                        <p class="text-gray-600 truncate max-w-xs">"${review.text}"</p>
+                        ${review.url ? `<a href="${review.url}" target="_blank" class="text-blue-500 underline">[Фото]</a>` : ''}
+                    </div>
+                    <button type="button" onclick="window.removeReview(${idx})" class="text-red-500 hover:text-red-700 text-xs font-bold">×</button>
+                `;
+                container.appendChild(div);
+            });
+        };
+
+        document.getElementById('addReviewBtn').addEventListener('click', async () => {
+            const user = document.getElementById('reviewUser').value;
+            const rating = parseInt(document.getElementById('reviewRating').value);
+            const text = document.getElementById('reviewText').value;
+            const fileInput = document.getElementById('reviewImage');
+            const file = fileInput.files[0];
+
+            if (!user || !text) {
+                showToast("Заповніть ім'я та текст", true);
+                return;
+            }
+
+            toggleLoading('addReviewBtn', true, 'Додавання');
+
+            let url = null;
+            if (file) {
+                try {
+                    const storageRef = ref(storage, `reviews/${Date.now()}_${file.name}`);
+                    await uploadBytes(storageRef, file);
+                    url = await getDownloadURL(storageRef);
+                } catch (e) {
+                    console.error(e);
+                    showToast("Помилка фото", true);
+                }
+            }
+
+            currentReviews.push({ user, rating, text, type: url ? 'image' : null, url });
+            
+            // Reset fields
+            document.getElementById('reviewUser').value = '';
+            document.getElementById('reviewText').value = '';
+            document.getElementById('reviewRating').value = '5';
+            fileInput.value = '';
+            
+            renderReviewsList();
+            toggleLoading('addReviewBtn', false, 'Додати відгук');
+        });
+
+        window.removeReview = (idx) => {
+            currentReviews.splice(idx, 1);
+            renderReviewsList();
+        };
+
+        // --- 5. DATA FETCHING ---
+
+        const renderProductTable = () => {
+             const tbody = document.getElementById('productsTableBody');
+             document.getElementById('productCount').innerText = allProducts.length;
+             tbody.innerHTML = '';
+             
+             if(allProducts.length === 0) {
+                 tbody.innerHTML = '<tr><td colspan="5" class="p-8 text-center text-gray-400">Товарів немає</td></tr>';
+                 return;
+             }
+
+             allProducts.forEach(p => {
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-gray-50 transition border-b border-gray-100";
+                const isLegacy = typeof p.id === 'number'; 
+                
+                tr.innerHTML = `
+                    <td class="p-4">
+                        <img src="${p.images?.[0] || 'https://placehold.co/50'}" class="w-10 h-12 object-cover rounded bg-gray-200">
+                    </td>
+                    <td class="p-4 font-medium">
+                        ${p.title}
+                        ${isLegacy ? '<span class="ml-2 bg-yellow-100 text-yellow-800 text-[10px] px-1 rounded">LEGACY</span>' : ''}
+                    </td>
+                    <td class="p-4">
+                        ${p.oldPrice ? `<span class="text-red-400 line-through text-xs mr-1">${p.oldPrice}</span>` : ''}
+                        ${p.price}
+                    </td>
+                    <td class="p-4 text-gray-400 text-xs">${p.id}</td>
+                    <td class="p-4 text-right space-x-2">
+                        <button onclick="window.editProduct('${p.id}')" class="text-blue-600 hover:text-black font-bold text-xs uppercase">${isLegacy ? 'Імпорт' : 'Ред.'}</button>
+                        ${!isLegacy ? `<button onclick="window.deleteProduct('${p.id}')" class="text-red-400 hover:text-red-600 font-bold text-xs uppercase">Вид.</button>` : ''}
+                    </td>
+                `;
+                tbody.appendChild(tr);
+             });
+        };
+
+        const subscribeToProducts = () => {
+            const q = query(collection(db, "products"), orderBy("createdAt", "desc"));
+            onSnapshot(q, (snapshot) => {
+                const firebaseProducts = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                allProducts = [...firebaseProducts, ...STATIC_PRODUCTS];
+                renderProductTable();
+            });
+        };
+
+        // Form Submission (Create or Update)
+        document.getElementById('productForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            toggleLoading('submitBtn', true, 'Обробка');
 
             try {
-                const timestamp = Date.now();
-                const sanitizedTitle = title.replace(/[^a-z0-9]/gi, '_').toLowerCase();
-
-                // 1. Upload Product Images
-                const imageUrls = [];
-                for (let i = 0; i < selectedProductFiles.length; i++) {
-                    const file = selectedProductFiles[i];
-                    const path = `products/${timestamp}_${sanitizedTitle}_${i}.${file.name.split('.').pop()}`;
-                    const url = await uploadFile(file, path);
-                    imageUrls.push(url);
+                // 1. Upload New Images
+                const newUrls = [];
+                for (let i = 0; i < selectedFiles.length; i++) {
+                    const file = selectedFiles[i];
+                    const storageRef = ref(storage, `products/${Date.now()}_${file.name}`);
+                    await uploadBytes(storageRef, file);
+                    const url = await getDownloadURL(storageRef);
+                    newUrls.push(url);
                 }
 
-                // 2. Gather Attributes
-                const category = document.getElementById('category').value;
-                const videoId = document.getElementById('videoId').value;
-                const sizeCategory = document.getElementById('sizeCategory').value;
+                const finalImages = [...existingImageUrls, ...newUrls];
                 
-                const sizes = Array.from(document.querySelectorAll('input[name="sizes"]:checked')).map(cb => cb.value);
-                
-                const colors = [];
-                document.querySelectorAll('.color-row').forEach(row => {
-                    const name = row.querySelector('.color-name').value;
-                    const code = row.querySelector('.color-code').value;
-                    if(name) colors.push({ name, code });
-                });
-
-                // 3. Process Reviews
-                const reviews = [];
-                const reviewElements = document.querySelectorAll('.review-item');
-                
-                for (let i = 0; i < reviewElements.length; i++) {
-                    const el = reviewElements[i];
-                    const user = el.querySelector('.review-user').value || 'Клієнт';
-                    const rating = parseInt(el.querySelector('.review-rating').value);
-                    const text = el.querySelector('.review-text').value;
-                    const fileInput = el.querySelector('.review-file');
-                    
-                    let mediaUrl = null;
-                    let type = null;
-
-                    if (fileInput.files.length > 0) {
-                        const file = fileInput.files[0];
-                        const isVideo = file.type.startsWith('video/');
-                        type = isVideo ? 'video' : 'image';
-                        const path = `reviews/${timestamp}_rev_${i}.${file.name.split('.').pop()}`;
-                        mediaUrl = await uploadFile(file, path);
-                    }
-
-                    if (text || mediaUrl) {
-                        reviews.push({ user, rating, text, type, url: mediaUrl });
-                    }
-                }
-
-                // 4. Construct Object
                 const productData = {
-                    title,
-                    price,
-                    category,
-                    videoId: videoId || null,
-                    sizeCategory,
-                    sizes,
-                    colors, // Stores {name, code}
-                    images: imageUrls,
-                    reviews,
-                    createdAt: serverTimestamp()
+                    title: document.getElementById('title').value,
+                    price: Number(document.getElementById('price').value),
+                    oldPrice: document.getElementById('oldPrice').value ? Number(document.getElementById('oldPrice').value) : null,
+                    category: document.getElementById('category').value,
+                    sizeCategory: document.getElementById('sizeCategory').value,
+                    videoId: document.getElementById('videoId').value || null,
+                    sizes: Array.from(document.querySelectorAll('input[name="sizes"]:checked')).map(cb => cb.value),
+                    images: finalImages,
+                    reviews: currentReviews,
+                    sizeChart: currentSizeChartRows, // NEW: Array of objects
+                    updatedAt: serverTimestamp()
                 };
 
-                // 5. Save to Firestore
-                await addDoc(collection(db, "products"), productData);
-
-                showToast("✅ Товар успішно збережено!");
+                if (!editingProductId) {
+                    // Create (Also handles "Import" of legacy products)
+                    productData.createdAt = serverTimestamp();
+                    productData.colors = []; 
+                    await addDoc(collection(db, "products"), productData);
+                    showToast("✅ Товар створено/імпортовано!");
+                } else {
+                    // Update existing
+                    await updateDoc(doc(db, "products", editingProductId), productData);
+                    showToast("✅ Товар оновлено!");
+                }
                 
-                // Reset Form
-                document.getElementById('productForm').reset();
-                selectedProductFiles = [];
-                renderProductPreviews();
-                colorsContainer.innerHTML = '';
-                reviewsContainer.innerHTML = '<div class="text-center text-gray-400 py-4 text-sm italic" id="noReviewsMsg">Відгуків поки немає. Додайте перший!</div>';
-                window.scrollTo(0,0);
+                resetForm();
 
-            } catch (error) {
-                console.error("Error adding document: ", error);
-                showToast(`❌ Помилка: ${error.message}`, true);
+            } catch (err) {
+                console.error(err);
+                showToast("❌ Помилка: " + err.message, true);
             } finally {
-                setLoading(false);
+                toggleLoading('submitBtn', false, editingProductId ? 'Оновити товар' : 'Зберегти товар');
             }
         });
+
+        // Edit Function
+        window.editProduct = async (id) => {
+            let productToEdit = allProducts.find(p => String(p.id) === String(id));
+            if (!productToEdit) return;
+
+            const isLegacy = typeof productToEdit.id === 'number';
+
+            if (isLegacy) {
+                 showToast("ℹ️ Імпорт старого товару. Збережіть, щоб додати в базу.");
+                 editingProductId = null; // Important: Treat as NEW
+                 document.getElementById('formTitle').innerText = `Імпорт: ${productToEdit.title}`;
+                 document.getElementById('submitBtn').innerText = "Зберегти як новий";
+            } else {
+                 editingProductId = productToEdit.id;
+                 document.getElementById('formTitle').innerText = "Редагування товару";
+                 document.getElementById('submitBtn').innerText = "Оновити товар";
+            }
+            
+            // Populate State
+            existingImageUrls = productToEdit.images || [];
+            selectedFiles = [];
+            currentReviews = productToEdit.reviews || [];
+            currentSizeChartRows = Array.isArray(productToEdit.sizeChart) ? productToEdit.sizeChart : [];
+
+            // UI Update
+            document.getElementById('resetFormBtn').classList.remove('hidden');
+            
+            // Populate Fields
+            document.getElementById('title').value = productToEdit.title;
+            document.getElementById('price').value = productToEdit.price;
+            document.getElementById('oldPrice').value = productToEdit.oldPrice || '';
+            document.getElementById('category').value = productToEdit.category || 'Лосини';
+            document.getElementById('sizeCategory').value = productToEdit.sizeCategory || 'default';
+            document.getElementById('videoId').value = productToEdit.videoId || '';
+
+            // Populate Checkboxes
+            const sizes = productToEdit.sizes || [];
+            document.querySelectorAll('input[name="sizes"]').forEach(cb => {
+                cb.checked = sizes.includes(cb.value);
+            });
+
+            renderPreviews();
+            renderReviewsList();
+            renderSizeChartTable();
+            window.scrollTo({ top: 300, behavior: 'smooth' });
+        };
+
+        // Delete Function
+        window.deleteProduct = async (id) => {
+            if (confirm("Ви впевнені? Це незворотньо.")) {
+                try {
+                    await deleteDoc(doc(db, "products", id));
+                    showToast("🗑 Товар видалено");
+                } catch (e) {
+                    showToast("Помилка видалення", true);
+                }
+            }
+        };
+
+        const resetForm = () => {
+            editingProductId = null;
+            selectedFiles = [];
+            existingImageUrls = [];
+            currentReviews = [];
+            currentSizeChartRows = [];
+            document.getElementById('productForm').reset();
+            document.getElementById('formTitle').innerText = "Додати новий товар";
+            document.getElementById('submitBtn').innerText = "Зберегти товар";
+            document.getElementById('resetFormBtn').classList.add('hidden');
+            renderPreviews();
+            renderReviewsList();
+            renderSizeChartTable();
+        };
+
+        document.getElementById('resetFormBtn').addEventListener('click', resetForm);
 
     </script>
 </body>

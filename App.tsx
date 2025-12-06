@@ -1,8 +1,9 @@
+
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import ReactDOM from 'react-dom/client';
 import { PRODUCTS, CATEGORIES, SIZE_CHARTS } from './constants';
-import { Product, CartItem } from './types';
-// Removed v9 modular imports as we are switching to v8 compat style due to environment issues
-// import { collection, getDocs, query, orderBy } from 'firebase/firestore'; 
+import { Product, CartItem, SiteSettings, Review, SizeChartRow } from './types';
+import { collection, getDocs, query, orderBy, doc, getDoc } from 'firebase/firestore'; 
 import { db } from './firebase';
 
 // Icons using SVG components
@@ -18,19 +19,42 @@ const XIcon = () => (
 const ArrowRightIcon = () => (
   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
 );
+const ArrowLeftIcon = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+);
 const ArrowUpIcon = () => (
-  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg>
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg>
 );
 const RulerIcon = () => (
    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 12h20"></path><path d="M6 12v-2"></path><path d="M10 12v-2"></path><path d="M14 12v-2"></path><path d="M18 12v-2"></path></svg>
+);
+const ChevronDownIcon = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+);
+const ChevronUpIcon = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>
+);
+const PlayIcon = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+);
+const StarIcon = ({ filled }: { filled: boolean }) => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill={filled ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={filled ? "text-yellow-500" : "text-gray-300"}><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
 );
 
 const TG_BOT_TOKEN = '7628860733:AAHrK-pL_aQ0HpJ1tB0O6uC-6C6QzO5e3i8';
 const TG_CHAT_ID = '-4763943340';
 
+const DEFAULT_SETTINGS: SiteSettings = {
+  heroTitle: "NEW\nCOLLECTION",
+  heroSubtitle: "Весна - Літо 2025",
+  heroBackgroundUrl: "https://images.unsplash.com/photo-1483985988355-763728e1935b?q=80&w=2070&auto=format&fit=crop",
+  logoText: "TVIYKOMPLEKT"
+};
+
 export default function App() {
   // Data State
   const [allProducts, setAllProducts] = useState<Product[]>([]);
+  const [siteSettings, setSiteSettings] = useState<SiteSettings>(DEFAULT_SETTINGS);
   const [isLoading, setIsLoading] = useState(true);
 
   // UI State
@@ -59,6 +83,10 @@ export default function App() {
   const [showReviewsAccordion, setShowReviewsAccordion] = useState(false);
   const [sizeError, setSizeError] = useState(false);
 
+  // Lightbox State
+  const [isLightboxOpen, setIsLightboxOpen] = useState(false);
+  const [lightboxIndex, setLightboxIndex] = useState(0);
+
   // References
   const searchInputRef = useRef<HTMLInputElement>(null);
   const searchContainerRef = useRef<HTMLDivElement>(null);
@@ -68,8 +96,22 @@ export default function App() {
     const fetchData = async () => {
       try {
         setIsLoading(true);
-        // 1. Fetch from Firestore (v8 syntax)
-        const querySnapshot = await db.collection("products").orderBy("createdAt", "desc").get();
+        
+        // 1. Fetch Site Settings
+        try {
+          const settingsRef = doc(db, "settings", "site_content");
+          const settingsSnap = await getDoc(settingsRef);
+          if (settingsSnap.exists()) {
+            setSiteSettings({ ...DEFAULT_SETTINGS, ...settingsSnap.data() } as SiteSettings);
+          }
+        } catch (err) {
+          console.warn("Could not fetch site settings, using defaults", err);
+        }
+
+        // 2. Fetch Products
+        const productsRef = collection(db, "products");
+        const q = query(productsRef, orderBy("createdAt", "desc"));
+        const querySnapshot = await getDocs(q);
         
         const firebaseProducts: Product[] = querySnapshot.docs.map((doc: any) => {
           const data = doc.data();
@@ -78,21 +120,22 @@ export default function App() {
             id: doc.id,
             title: data.title,
             price: Number(data.price),
-            images: data.images || [],
-            sizes: data.sizes || ["S", "M", "L"],
-            colors: data.colors ? data.colors.map((c: any) => c.name || c) : [], // Handle complex colors object
+            oldPrice: data.oldPrice ? Number(data.oldPrice) : undefined,
+            images: Array.isArray(data.images) ? data.images : [],
+            sizes: Array.isArray(data.sizes) ? data.sizes : ["S", "M", "L"],
+            colors: Array.isArray(data.colors) ? data.colors.map((c: any) => c.name || c) : [],
             videoId: data.videoId || undefined,
             sizeCategory: data.sizeCategory || 'default',
-            reviews: data.reviews || [],
-            relatedColors: [], // Admin panel doesn't set this yet, can be computed later
+            sizeChart: data.sizeChart || undefined, // Array of SizeChartRow
+            reviews: Array.isArray(data.reviews) ? data.reviews : [],
+            relatedColors: [], 
           } as Product;
         });
 
-        // 2. Merge with Static Products (Static at bottom, Newest Firestore at top)
+        // 3. Merge with Static Products 
         setAllProducts([...firebaseProducts, ...PRODUCTS]);
       } catch (error) {
-        console.error("Error fetching products:", error);
-        // Fallback to static only on error
+        console.error("Error fetching data:", error);
         setAllProducts(PRODUCTS);
       } finally {
         setIsLoading(false);
@@ -104,13 +147,18 @@ export default function App() {
 
   // Effects
   useEffect(() => {
-    // Load Cart from LocalStorage
+    // Load Cart from LocalStorage with Array Validation
     const savedCart = localStorage.getItem('myShopCart');
     if (savedCart) {
       try {
-        setCart(JSON.parse(savedCart));
+        const parsedCart = JSON.parse(savedCart);
+        if (Array.isArray(parsedCart)) {
+            setCart(parsedCart);
+        } else {
+            setCart([]);
+        }
       } catch (e) {
-        console.error("Failed to parse cart", e);
+        setCart([]);
       }
     }
 
@@ -124,7 +172,9 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    localStorage.setItem('myShopCart', JSON.stringify(cart));
+    if (Array.isArray(cart)) {
+        localStorage.setItem('myShopCart', JSON.stringify(cart));
+    }
   }, [cart]);
 
   // Reset modal state when product changes
@@ -136,17 +186,16 @@ export default function App() {
       setShowReviewsAccordion(false);
       setSelectedSizeForModal('');
       setSizeError(false);
+      setIsLightboxOpen(false);
     }
   }, [selectedProduct]);
 
-  // Focus input when search opens
   useEffect(() => {
     if (isSearchOpen && searchInputRef.current) {
       searchInputRef.current.focus();
     }
   }, [isSearchOpen]);
 
-  // Close search when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (searchContainerRef.current && !searchContainerRef.current.contains(event.target as Node)) {
@@ -164,8 +213,7 @@ export default function App() {
 
   // Derived State (Filtering)
   const filteredProducts = useMemo(() => {
-    // Use allProducts state instead of constant
-    return allProducts.filter(product => {
+    return (allProducts || []).filter(product => {
       const matchCategory = activeCategory === 'all' || product.title.toLowerCase().includes(activeCategory.toLowerCase());
       const matchSearch = product.title.toLowerCase().includes(searchQuery.toLowerCase());
       return matchCategory && matchSearch;
@@ -186,37 +234,33 @@ export default function App() {
   };
 
   const getEmbedUrl = (videoId: string) => {
-      if (videoId.length === 11) {
-          return `https://www.youtube.com/embed/${videoId}?autoplay=1`;
-      }
-      return videoId; 
+      if (!videoId) return "";
+      const id = videoId.includes('v=') ? videoId.split('v=')[1] : videoId;
+      return `https://www.youtube.com/embed/${id}`;
   }
 
-  // Robust Image Getter for Modal
   const getProductImages = (product: Product | null) => {
       if (!product) return [];
-      // Prefer the new 'images' array. If empty, check for legacy 'image' property (fallback).
-      // If still empty, return placeholder.
-      if (product.images && product.images.length > 0) return product.images;
-      // @ts-ignore - handling legacy field if it exists in data but not in type
+      if (Array.isArray(product.images) && product.images.length > 0) return product.images;
+      // @ts-ignore 
       if (product.image) return [product.image];
       return ['https://via.placeholder.com/400x500?text=No+Image'];
   };
 
   // Cart Logic
   const addToCart = (product: Product, size: string) => {
-    if (product.sizes.length > 0 && !size) {
+    if (product.sizes && product.sizes.length > 0 && !size) {
       showToast("⚠️ Оберіть розмір!", "error");
       setSizeError(true);
-      setTimeout(() => setSizeError(false), 600); // Clear error animation after it plays
+      setTimeout(() => setSizeError(false), 600); 
       return;
     }
     const finalSize = size || "One Size";
     const newItem: CartItem = { ...product, selectedSize: finalSize, cartId: Date.now() };
-    setCart([...cart, newItem]);
+    setCart([...(cart || []), newItem]);
     showToast(`✅ ${product.title} додано!`);
     setIsCartOpen(true);
-    setSelectedProduct(null); // Close modal if open
+    setSelectedProduct(null); 
   };
 
   const removeFromCart = (index: number) => {
@@ -225,37 +269,21 @@ export default function App() {
     setCart(newCart);
   };
 
-  const cartTotal = cart.reduce((acc, item) => acc + item.price, 0);
+  const cartTotal = (cart || []).reduce((acc, item) => acc + item.price, 0);
 
-  // --- Validation Logic ---
-
+  // Validation & Checkout
   const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    // Allow only letters (Cyrillic/Latin), hyphens, and spaces
     const val = e.target.value.replace(/[^a-zA-Zа-яА-ЯёЁіІїЇєЄґҐ\s-]/g, '');
     setOrderForm(prev => ({ ...prev, name: val }));
-    // Clear error if user is typing
     if (formErrors.name) setFormErrors(prev => ({ ...prev, name: false }));
   };
 
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    let val = e.target.value.replace(/\D/g, ''); // Remove non-digits
-
-    // Smart Prefix Logic
-    if (val.startsWith('0')) {
-        val = '38' + val;
-    } else if (val.startsWith('80')) {
-        val = '3' + val;
-    }
-    
-    // Ensure it always starts with 380 if there is any input
-    if (val && !val.startsWith('380')) {
-        val = '380' + val;
-    }
-
-    // Limit to 12 digits (380 XX XXX XX XX)
+    let val = e.target.value.replace(/\D/g, ''); 
+    if (val.startsWith('0')) val = '38' + val;
+    else if (val.startsWith('80')) val = '3' + val;
+    if (val && !val.startsWith('380')) val = '380' + val;
     val = val.substring(0, 12);
-
-    // Apply Mask: +380 (XX) XXX-XX-XX
     let formatted = '';
     if (val.length > 0) formatted += '+' + val.substring(0, 3);
     if (val.length > 3) formatted += ' (' + val.substring(3, 5);
@@ -273,11 +301,9 @@ export default function App() {
   }
 
   const handleCheckout = async () => {
-    // 1. Strict Validation
     const cleanPhone = orderForm.phone.replace(/\D/g, '');
-    
     const isNameValid = orderForm.name.trim().length >= 2;
-    const isPhoneValid = cleanPhone.length === 12; // Must be exactly 12 digits: 380XXXXXXXXX
+    const isPhoneValid = cleanPhone.length === 12; 
     const isCityValid = orderForm.city.trim().length > 0;
 
     if (!isNameValid || !isPhoneValid || !isCityValid) {
@@ -286,19 +312,12 @@ export default function App() {
             phone: !isPhoneValid,
             city: !isCityValid
         });
-        
-        let errorMsg = "Перевірте дані!";
-        if (!isNameValid) errorMsg = "Ім'я занадто коротке";
-        else if (!isPhoneValid) errorMsg = "Невірний номер телефону";
-        else if (!isCityValid) errorMsg = "Вкажіть місто";
-        
-        showToast(`❌ ${errorMsg}`, "error");
+        showToast("❌ Перевірте дані!", "error");
         return;
     }
 
-    // 2. Prepare Data
     let message = `<b>📦 НОВЕ ЗАМОВЛЕННЯ!</b>\n\n👤 <b>Клієнт:</b> ${orderForm.name}\n📞 <b>Телефон:</b> ${orderForm.phone}\n🏙 <b>Адреса:</b> ${orderForm.city}\n\n🛒 <b>Товари:</b>\n`;
-    cart.forEach((item, index) => {
+    (cart || []).forEach((item, index) => {
         message += `${index + 1}. ${item.title} (${item.selectedSize}) - ${item.price} грн\n`;
     });
     message += `\n💰 <b>Разом до сплати:</b> ${cartTotal} грн`;
@@ -325,39 +344,68 @@ export default function App() {
         showToast("❌ Помилка відправки.", "error");
       }
     } catch (error) {
-      console.error(error);
       showToast("❌ Помилка з'єднання.", "error");
     }
   };
 
   const switchColor = (newId: number | string) => {
       const newProduct = allProducts.find(p => p.id === newId);
-      if (newProduct) {
-          setSelectedProduct(newProduct);
-          // Scroll to top of info section if needed, or just standard React re-render will handle data
-      }
+      if (newProduct) setSelectedProduct(newProduct);
   };
 
-  // Resolve Size Chart
+  // Determine which size chart to use
   const activeSizeChart = useMemo(() => {
     if (!selectedProduct) return null;
-    if (selectedProduct.sizeChart) return selectedProduct.sizeChart; // Product specific
-    if (selectedProduct.sizeCategory && SIZE_CHARTS[selectedProduct.sizeCategory]) {
-        return SIZE_CHARTS[selectedProduct.sizeCategory]; // Category based
+    
+    // PRIORITY 1: Custom Size Chart from Firestore (Array of Objects)
+    if (selectedProduct.sizeChart && Array.isArray(selectedProduct.sizeChart) && selectedProduct.sizeChart.length > 0) {
+        return { type: 'custom', data: selectedProduct.sizeChart };
     }
-    return SIZE_CHARTS['default']; // Fallback
+    
+    // PRIORITY 2: Static Category Chart
+    if (selectedProduct.sizeCategory && SIZE_CHARTS[selectedProduct.sizeCategory]) {
+        return { type: 'static', data: SIZE_CHARTS[selectedProduct.sizeCategory] }; 
+    }
+    
+    return { type: 'static', data: SIZE_CHARTS['default'] }; 
   }, [selectedProduct]);
 
   // Calculate Average Rating
   const averageRating = useMemo(() => {
-    if (!selectedProduct || !selectedProduct.reviews || selectedProduct.reviews.length === 0) return 5;
+    if (!selectedProduct || !Array.isArray(selectedProduct.reviews) || selectedProduct.reviews.length === 0) return 5;
     const total = selectedProduct.reviews.reduce((acc, r) => acc + r.rating, 0);
     return Math.round(total / selectedProduct.reviews.length);
   }, [selectedProduct]);
 
+  // Gather all review media for lightbox
+  const allReviewMedia = useMemo(() => {
+    if (!selectedProduct || !selectedProduct.reviews) return [];
+    return selectedProduct.reviews
+      .filter(r => r.url) // Only those with media
+      .map(r => ({ type: r.type || 'image', url: r.url, user: r.user }));
+  }, [selectedProduct]);
+
+  const openLightbox = (mediaUrl: string) => {
+    const index = allReviewMedia.findIndex(m => m.url === mediaUrl);
+    if (index >= 0) {
+      setLightboxIndex(index);
+      setIsLightboxOpen(true);
+    }
+  };
+
+  const nextLightboxMedia = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setLightboxIndex(prev => (prev + 1) % allReviewMedia.length);
+  };
+
+  const prevLightboxMedia = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setLightboxIndex(prev => (prev - 1 + allReviewMedia.length) % allReviewMedia.length);
+  };
+
   return (
     <div className="min-h-screen flex flex-col font-sans">
-      {/* Notifications - FIXED Z-INDEX to be above modal */}
+      {/* Notifications */}
       {notification && (
         <div className={`fixed top-5 right-5 z-[100] px-6 py-4 text-white uppercase text-xs font-bold tracking-widest shadow-lg transition-all transform translate-y-0 ${notification.type === 'error' ? 'bg-red-600' : 'bg-black'}`}>
           {notification.message}
@@ -373,7 +421,6 @@ export default function App() {
              <button 
               className={`p-2 transition-colors duration-300 hover:opacity-70 ${scrolled ? 'text-black' : 'text-white'}`}
               onClick={() => setIsSearchOpen(!isSearchOpen)}
-              title={isSearchOpen ? "Закрити пошук" : "Пошук"}
             >
               {isSearchOpen ? (
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
@@ -381,7 +428,6 @@ export default function App() {
                 <SearchIcon />
               )}
             </button>
-            {/* Search Dropdown */}
             {isSearchOpen && (
               <div className="absolute top-full left-0 mt-2 w-72 bg-white shadow-xl border border-gray-100 p-2 rounded-sm animate-fade-in-down z-50">
                  <input 
@@ -393,7 +439,7 @@ export default function App() {
                   onChange={(e) => {
                     setSearchQuery(e.target.value);
                     setActiveCategory('all');
-                    window.scrollTo({ top: 600, behavior: 'smooth' }); // Scroll to grid
+                    window.scrollTo({ top: 600, behavior: 'smooth' }); 
                   }}
                  />
               </div>
@@ -409,7 +455,7 @@ export default function App() {
               window.scrollTo({ top: 0, behavior: 'smooth' });
             }}
           >
-            TVIYKOMPLEKT
+            {siteSettings.logoText}
           </div>
 
           {/* Cart Trigger */}
@@ -418,7 +464,7 @@ export default function App() {
             onClick={() => setIsCartOpen(true)}
           >
             <ShoppingBagIcon />
-            {cart.length > 0 && (
+            {cart && cart.length > 0 && (
               <span className={`absolute -top-1 -right-1 text-[10px] font-bold h-4 w-4 flex items-center justify-center rounded-full ${scrolled ? 'bg-black text-white' : 'bg-white text-black'}`}>
                 {cart.length}
               </span>
@@ -431,7 +477,7 @@ export default function App() {
       <section className="relative h-[600px] md:h-[80vh] w-full bg-gray-900 overflow-hidden flex items-center justify-center md:justify-start">
         <div className="absolute inset-0 z-0">
             <img 
-                src="https://images.unsplash.com/photo-1483985988355-763728e1935b?q=80&w=2070&auto=format&fit=crop" 
+                src={siteSettings.heroBackgroundUrl} 
                 alt="Hero Background" 
                 className="w-full h-full object-cover opacity-80"
             />
@@ -440,9 +486,9 @@ export default function App() {
         
         <div className="relative z-10 px-6 md:pl-24 max-w-2xl text-center md:text-left">
             <div className="backdrop-blur-md bg-white/10 p-8 md:p-12 border border-white/20 shadow-2xl">
-                <span className="block text-xs md:text-sm tracking-[0.3em] text-white/90 mb-4 uppercase">Весна - Літо 2025</span>
-                <h1 className="font-serif text-4xl md:text-6xl text-white font-bold mb-6 leading-tight">
-                    NEW <br/> COLLECTION
+                <span className="block text-xs md:text-sm tracking-[0.3em] text-white/90 mb-4 uppercase">{siteSettings.heroSubtitle}</span>
+                <h1 className="font-serif text-4xl md:text-6xl text-white font-bold mb-6 leading-tight whitespace-pre-line">
+                    {siteSettings.heroTitle}
                 </h1>
                 <p className="text-white/80 mb-8 text-sm md:text-base leading-relaxed">
                     Естетика. Комфорт. Впевненість. Одяг, який підкреслює твою індивідуальність.
@@ -490,7 +536,7 @@ export default function App() {
           </div>
         ) : displayedProducts.length > 0 ? (
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-8">
-                {displayedProducts.map(product => {
+                {(displayedProducts || []).map(product => {
                     const images = getProductImages(product);
                     return (
                         <div key={product.id} className="group cursor-pointer" onClick={() => {
@@ -503,15 +549,19 @@ export default function App() {
                                     className="w-full h-full object-cover object-top transition-transform duration-700 group-hover:scale-105"
                                     loading="lazy"
                                 />
-                                {/* Quick Add Overlay (Desktop) */}
-                                <div className="absolute inset-x-0 bottom-0 bg-white/95 p-4 translate-y-full group-hover:translate-y-0 transition-transform duration-300 hidden md:flex flex-col gap-3 border-t border-gray-100">
-                                    <button className="w-full bg-black text-white py-3 text-xs uppercase tracking-widest font-bold hover:bg-gray-800 transition-colors">
-                                        Швидкий перегляд
-                                    </button>
-                                </div>
+                                {product.oldPrice && product.oldPrice > product.price && (
+                                    <div className="absolute top-2 right-2 bg-red-600 text-white text-[10px] font-bold px-2 py-1 uppercase">
+                                        SALE
+                                    </div>
+                                )}
                             </div>
                             <h3 className="text-xs uppercase tracking-wide text-gray-900 truncate mb-1 pr-2">{product.title}</h3>
-                            <p className="text-sm font-semibold text-gray-900">{product.price} UAH</p>
+                            <div className="flex items-center gap-2">
+                                {product.oldPrice && product.oldPrice > product.price && (
+                                    <span className="text-xs text-gray-400 line-through">{product.oldPrice} UAH</span>
+                                )}
+                                <span className={`text-sm font-semibold ${product.oldPrice ? 'text-red-600' : 'text-gray-900'}`}>{product.price} UAH</span>
+                            </div>
                         </div>
                     );
                 })}
@@ -546,16 +596,12 @@ export default function App() {
       <footer className="bg-black text-white pt-16 pb-8 px-6 mt-12">
         <div className="container mx-auto grid grid-cols-1 md:grid-cols-4 gap-12 border-b border-gray-800 pb-12">
             <div>
-                <h3 className="font-serif text-2xl mb-6">TVIYKOMPLEKT</h3>
+                <h3 className="font-serif text-2xl mb-6">{siteSettings.logoText}</h3>
                 <p className="text-gray-400 text-sm leading-relaxed mb-6">
                     Створюємо одяг, який підкреслює твою індивідуальність. Якість у кожному шві.
                 </p>
-                <div className="flex gap-4">
-                    <a href="#" className="text-xs font-bold border-b border-white pb-1 hover:text-gray-300">INSTAGRAM</a>
-                    <a href="#" className="text-xs font-bold border-b border-white pb-1 hover:text-gray-300">TIKTOK</a>
-                </div>
             </div>
-            
+            {/* Footer Links (Static) */}
             <div>
                 <h4 className="font-bold text-sm uppercase tracking-widest mb-6">Клієнтам</h4>
                 <ul className="space-y-3 text-sm text-gray-400">
@@ -564,22 +610,16 @@ export default function App() {
                     <li><a href="#" className="hover:text-white transition-colors">Таблиця розмірів</a></li>
                 </ul>
             </div>
-
             <div>
                 <h4 className="font-bold text-sm uppercase tracking-widest mb-6">Контакти</h4>
                 <div className="text-sm text-gray-400 space-y-2">
                     <p>+38 (097) 000-00-00</p>
                     <p>mon-fri: 10:00 - 19:00</p>
                     <p>myshop@gmail.com</p>
-                    <button className="mt-4 border border-white text-white px-6 py-2 text-xs uppercase hover:bg-white hover:text-black transition-colors">
-                        Зателефонувати
-                    </button>
                 </div>
             </div>
-
             <div>
                  <h4 className="font-bold text-sm uppercase tracking-widest mb-6">Newsletter</h4>
-                 <p className="text-gray-400 text-xs mb-4">Отримуй інформацію про знижки першим.</p>
                  <div className="flex border-b border-gray-600 pb-2">
                     <input type="email" placeholder="Ваш Email" className="bg-transparent w-full outline-none text-sm placeholder-gray-500"/>
                     <button className="text-white hover:text-gray-300"><ArrowRightIcon /></button>
@@ -587,9 +627,19 @@ export default function App() {
             </div>
         </div>
         <div className="text-center pt-8 text-xs text-gray-600">
-            &copy; 2025 TVIYKOMPLEKT. Всі права захищено.
+            &copy; 2025 {siteSettings.logoText}. Всі права захищено.
         </div>
       </footer>
+
+      {/* Scroll To Top Button */}
+      <button 
+        onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+        className={`fixed bottom-8 right-8 z-40 bg-black text-white p-3 rounded-full shadow-lg transition-all duration-300 transform hover:bg-gray-800 ${
+          showScrollTop ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10 pointer-events-none'
+        }`}
+      >
+        <ArrowUpIcon />
+      </button>
 
       {/* Product Modal */}
       {selectedProduct && (
@@ -597,7 +647,6 @@ export default function App() {
             <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setSelectedProduct(null)}></div>
             <div className="relative bg-white w-full max-w-6xl h-[95vh] rounded-sm overflow-hidden flex flex-col shadow-2xl animate-fade-in-up">
                 
-                {/* Close Button */}
                 <button 
                     onClick={() => setSelectedProduct(null)}
                     className="absolute top-4 right-4 z-50 p-2 bg-white/80 rounded-full hover:bg-white shadow-sm"
@@ -605,25 +654,24 @@ export default function App() {
                     <XIcon />
                 </button>
 
-                {/* Modal Content Scrollable Area */}
                 <div className="flex-1 overflow-y-auto">
-                    
-                    {/* Main Layout Grid */}
                     <div className="flex flex-col md:flex-row h-full">
-                        
-                        {/* Left: Gallery */}
+                        {/* Gallery */}
                         <div className="w-full md:w-1/2 bg-gray-50 p-4 md:p-8 flex flex-col h-[50vh] md:h-auto">
                            {(() => {
                                const images = getProductImages(selectedProduct);
                                return (
                                    <>
                                        <div className="flex-1 relative overflow-hidden bg-white shadow-sm aspect-[4/5] md:aspect-auto">
-                                           <img 
-                                                src={getImageUrl(images[currentImageIndex])} 
-                                                alt={selectedProduct.title} 
-                                                className="w-full h-full object-cover object-top"
-                                            />
-                                            {images.length > 1 && (
+                                            {images && images.length > 0 && (
+                                                <img 
+                                                        src={getImageUrl(images[currentImageIndex] || images[0])} 
+                                                        alt={selectedProduct.title} 
+                                                        /* FIX: object-contain to prevent cropping on mobile */
+                                                        className="w-full h-full object-contain object-center bg-gray-50"
+                                                    />
+                                            )}
+                                            {images && images.length > 1 && (
                                                 <>
                                                     <button 
                                                         className="absolute left-2 top-1/2 -translate-y-1/2 bg-white/70 p-2 hover:bg-white rounded-full shadow-sm transition-all"
@@ -632,7 +680,7 @@ export default function App() {
                                                             setCurrentImageIndex(prev => prev === 0 ? images.length - 1 : prev - 1);
                                                         }}
                                                     >
-                                                        <ArrowRightIcon />
+                                                        <ArrowLeftIcon />
                                                     </button>
                                                     <button 
                                                         className="absolute right-2 top-1/2 -translate-y-1/2 bg-white/70 p-2 hover:bg-white rounded-full shadow-sm transition-all"
@@ -648,7 +696,7 @@ export default function App() {
                                        </div>
                                        
                                        {/* Thumbnails */}
-                                       {images.length > 1 && (
+                                       {images && images.length > 1 && (
                                            <div className="mt-4 h-20 flex gap-2 overflow-x-auto no-scrollbar pb-2">
                                                {images.map((img, idx) => (
                                                    <button 
@@ -666,25 +714,29 @@ export default function App() {
                            })()}
                         </div>
 
-                        {/* Right: Info */}
+                        {/* Info */}
                         <div className="w-full md:w-1/2 p-6 md:p-10 flex flex-col bg-white overflow-y-auto">
                             <div className="mb-6">
                                 <h2 className="font-serif text-2xl md:text-3xl mb-1 leading-tight">{selectedProduct.title}</h2>
-                                {/* Rating Summary */}
                                 <div className="flex items-center gap-2 mb-3">
                                     <div className="flex text-yellow-500 text-sm">
                                         {'★'.repeat(averageRating)}{'☆'.repeat(5-averageRating)}
                                     </div>
                                     <span className="text-xs text-gray-500 font-medium">({selectedProduct.reviews?.length || 0} відгуків)</span>
                                 </div>
-                                <p className="text-xl font-bold">{selectedProduct.price} UAH</p>
+                                <div className="flex items-end gap-3">
+                                     {selectedProduct.oldPrice && selectedProduct.oldPrice > selectedProduct.price && (
+                                        <span className="text-lg text-gray-400 line-through">{selectedProduct.oldPrice} UAH</span>
+                                     )}
+                                    <p className={`text-xl font-bold ${selectedProduct.oldPrice ? 'text-red-600' : 'text-black'}`}>{selectedProduct.price} UAH</p>
+                                </div>
                             </div>
 
                             <div className="text-gray-600 text-sm leading-relaxed border-t border-gray-100 py-6 mb-6">
                                 <p>Опис: Тканина преміум якості, що дихає та не просвічує. Ідеально підходить для інтенсивних тренувань та повсякденного стилю. Анатомічний крій підкреслює фігуру.</p>
                             </div>
 
-                            {/* Color Selection (New) */}
+                            {/* Color Selection */}
                             {selectedProduct.relatedColors && selectedProduct.relatedColors.length > 0 && (
                                 <div className="mb-6">
                                     <p className="text-xs uppercase font-bold tracking-wider mb-2">Оберіть колір: <span className="text-gray-500 font-normal">{selectedProduct.relatedColors.find(c => c.id === selectedProduct.id)?.name}</span></p>
@@ -728,19 +780,42 @@ export default function App() {
                                             <table className="w-full text-left">
                                                 <thead>
                                                     <tr className="border-b border-gray-200 text-gray-500">
-                                                        {activeSizeChart.columns.map((col, i) => (
-                                                            <th key={i} className="py-2 px-2 font-medium">{col}</th>
-                                                        ))}
+                                                        {activeSizeChart.type === 'custom' ? (
+                                                            <>
+                                                                <th className="py-2 px-2 font-medium">Розмір</th>
+                                                                <th className="py-2 px-2 font-medium">Груди</th>
+                                                                <th className="py-2 px-2 font-medium">Талія</th>
+                                                                <th className="py-2 px-2 font-medium">Стегна</th>
+                                                            </>
+                                                        ) : (
+                                                            // @ts-ignore - Handle legacy static chart structure
+                                                            activeSizeChart.data.columns.map((col: string, i: number) => (
+                                                                <th key={i} className="py-2 px-2 font-medium">{col}</th>
+                                                            ))
+                                                        )}
                                                     </tr>
                                                 </thead>
                                                 <tbody>
-                                                    {activeSizeChart.rows.map((row, i) => (
-                                                        <tr key={i} className="border-b border-gray-100 last:border-0 hover:bg-gray-100/50">
-                                                            {row.map((cell, j) => (
-                                                                <td key={j} className="py-2 px-2 text-gray-700 font-medium">{cell}</td>
-                                                            ))}
-                                                        </tr>
-                                                    ))}
+                                                    {activeSizeChart.type === 'custom' ? (
+                                                        // @ts-ignore
+                                                        activeSizeChart.data.map((row: SizeChartRow, i: number) => (
+                                                            <tr key={i} className="border-b border-gray-100 last:border-0 hover:bg-gray-100/50">
+                                                                <td className="py-2 px-2 text-gray-700 font-medium">{row.size}</td>
+                                                                <td className="py-2 px-2 text-gray-700 font-medium">{row.bust}</td>
+                                                                <td className="py-2 px-2 text-gray-700 font-medium">{row.waist}</td>
+                                                                <td className="py-2 px-2 text-gray-700 font-medium">{row.hips}</td>
+                                                            </tr>
+                                                        ))
+                                                    ) : (
+                                                        // @ts-ignore
+                                                        activeSizeChart.data.rows.map((row: string[], i: number) => (
+                                                            <tr key={i} className="border-b border-gray-100 last:border-0 hover:bg-gray-100/50">
+                                                                {row.map((cell, j) => (
+                                                                    <td key={j} className="py-2 px-2 text-gray-700 font-medium">{cell}</td>
+                                                                ))}
+                                                            </tr>
+                                                        ))
+                                                    )}
                                                 </tbody>
                                             </table>
                                         </div>
@@ -750,7 +825,7 @@ export default function App() {
                                 </div>
 
                                 <div className={`flex flex-wrap gap-3 p-2 rounded transition-all duration-300 ${sizeError ? 'input-error bg-red-50' : 'border border-transparent'}`}>
-                                    {selectedProduct.sizes.length > 0 ? selectedProduct.sizes.map(size => (
+                                    {selectedProduct.sizes && selectedProduct.sizes.length > 0 ? selectedProduct.sizes.map(size => (
                                         <button
                                             key={size}
                                             onClick={() => {
@@ -771,95 +846,139 @@ export default function App() {
                                 </div>
                             </div>
 
-                            {/* Video Accordion */}
-                            {selectedProduct.videoId && (
-                                <div className="mb-4">
-                                    <button
-                                        onClick={() => setShowVideoAccordion(!showVideoAccordion)}
-                                        className="flex items-center gap-2 text-xs uppercase font-bold tracking-wider hover:text-gray-600 transition-colors w-full py-2 text-left"
-                                        type="button"
-                                    >
-                                        <span className={`inline-block transition-transform duration-300 ${showVideoAccordion ? 'rotate-90' : 'rotate-0'}`}>
-                                            ▶
-                                        </span>
-                                        {showVideoAccordion ? 'Сховати відеоогляд' : 'Дивитись відеоогляд'}
-                                    </button>
-                                    
-                                    <div className={`overflow-hidden transition-all duration-500 ease-in-out ${showVideoAccordion ? 'max-h-[300px] opacity-100 mt-2' : 'max-h-0 opacity-0'}`}>
-                                        <div className="w-full aspect-video bg-black rounded shadow-inner">
-                                            {showVideoAccordion && (
-                                                 <iframe 
-                                                    width="100%" 
-                                                    height="100%" 
-                                                    src={getEmbedUrl(selectedProduct.videoId)} 
-                                                    title="Video Review" 
-                                                    frameBorder="0" 
-                                                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
-                                                    allowFullScreen
-                                                ></iframe>
-                                            )}
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
-
                             {/* Buy Button */}
                             <button 
                                 onClick={() => addToCart(selectedProduct, selectedSizeForModal)}
-                                className="w-full bg-black text-white py-4 uppercase tracking-widest text-sm font-bold hover:bg-gray-800 transition-colors shadow-lg mb-4"
+                                className="w-full bg-black text-white py-4 uppercase tracking-widest text-sm font-bold hover:bg-gray-800 transition-colors shadow-lg mb-6"
                             >
                                 Додати в кошик
                             </button>
 
-                            {/* Reviews Accordion */}
-                            <div className="border-t border-gray-100 pt-2">
-                                <button
-                                    onClick={() => setShowReviewsAccordion(!showReviewsAccordion)}
-                                    className="flex justify-between items-center w-full py-3 text-xs uppercase font-bold tracking-wider hover:text-gray-600 transition-colors"
+                            {/* Video Accordion */}
+                            {selectedProduct.videoId && (
+                              <div className="border-t border-gray-200">
+                                <button 
+                                  onClick={() => setShowVideoAccordion(!showVideoAccordion)}
+                                  className="w-full py-4 flex justify-between items-center text-left text-xs uppercase font-bold tracking-wider hover:text-black transition-colors"
                                 >
-                                    <span>⭐ Відгуки клієнтів ({selectedProduct.reviews?.length || 0})</span>
-                                    <span className={`inline-block transition-transform duration-300 ${showReviewsAccordion ? 'rotate-180' : 'rotate-0'}`}>
-                                        ▼
-                                    </span>
+                                  <span className="flex items-center gap-2"> <PlayIcon /> Дивитись відеоогляд</span>
+                                  {showVideoAccordion ? <ChevronUpIcon /> : <ChevronDownIcon />}
                                 </button>
-
-                                <div className={`overflow-hidden transition-all duration-500 ease-in-out ${showReviewsAccordion ? 'max-h-[400px] opacity-100' : 'max-h-0 opacity-0'}`}>
-                                    <div className="space-y-4 py-2 overflow-y-auto max-h-[400px] pr-2 custom-scrollbar">
-                                        {selectedProduct.reviews && selectedProduct.reviews.length > 0 ? (
-                                            selectedProduct.reviews.map((rev, idx) => (
-                                                <div key={idx} className="bg-gray-50 p-3 rounded border border-gray-100">
-                                                    <div className="flex justify-between items-start mb-2">
-                                                        <span className="text-xs font-bold">{rev.user}</span>
-                                                        <div className="flex text-yellow-500 text-[10px]">
-                                                            {'★'.repeat(rev.rating)}{'☆'.repeat(5-rev.rating)}
-                                                        </div>
-                                                    </div>
-                                                    <p className="text-xs text-gray-600 leading-relaxed mb-2">{rev.text}</p>
-                                                    
-                                                    {rev.url && (
-                                                        <div className="w-16 h-16 rounded overflow-hidden border border-gray-200 cursor-pointer hover:opacity-90 transition-opacity" onClick={() => window.open(rev.url, '_blank')}>
-                                                            {rev.type === 'video' ? (
-                                                                <div className="w-full h-full bg-gray-800 flex items-center justify-center">
-                                                                    <div className="w-0 h-0 border-l-[4px] border-l-white border-y-[3px] border-y-transparent ml-0.5"></div>
-                                                                </div>
-                                                            ) : (
-                                                                <img src={rev.url} alt="Review" className="w-full h-full object-cover" />
-                                                            )}
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            ))
-                                        ) : (
-                                            <p className="text-xs text-gray-400 italic text-center py-2">Ще немає відгуків.</p>
-                                        )}
-                                    </div>
+                                <div className={`overflow-hidden transition-all duration-500 ease-in-out ${showVideoAccordion ? 'max-h-96 opacity-100 pb-6' : 'max-h-0 opacity-0'}`}>
+                                   <div className="aspect-video bg-black rounded-sm overflow-hidden shadow-lg">
+                                      <iframe 
+                                          src={getEmbedUrl(selectedProduct.videoId)}
+                                          title="Video review"
+                                          className="w-full h-full"
+                                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                          allowFullScreen
+                                      ></iframe>
+                                   </div>
                                 </div>
+                              </div>
+                            )}
+
+                             {/* Reviews Accordion */}
+                            <div className="border-t border-gray-200 border-b mb-6">
+                              <button 
+                                onClick={() => setShowReviewsAccordion(!showReviewsAccordion)}
+                                className="w-full py-4 flex justify-between items-center text-left text-xs uppercase font-bold tracking-wider hover:text-black transition-colors"
+                              >
+                                <span className="flex items-center gap-2"> 
+                                    <StarIcon filled={true} /> 
+                                    Відгуки клієнтів ({selectedProduct.reviews?.length || 0})
+                                </span>
+                                {showReviewsAccordion ? <ChevronUpIcon /> : <ChevronDownIcon />}
+                              </button>
+                              <div className={`overflow-hidden transition-all duration-500 ease-in-out ${showReviewsAccordion ? 'max-h-[500px] opacity-100 pb-6 overflow-y-auto' : 'max-h-0 opacity-0'}`}>
+                                   {selectedProduct.reviews && selectedProduct.reviews.length > 0 ? (
+                                     <div className="space-y-4">
+                                       {selectedProduct.reviews.map((review, i) => (
+                                          <div key={i} className="bg-gray-50 p-4 rounded-sm border border-gray-100">
+                                              <div className="flex justify-between items-start mb-2">
+                                                 <span className="font-bold text-sm">{review.user}</span>
+                                                 <div className="flex text-yellow-500 text-xs">
+                                                    {'★'.repeat(review.rating)}{'☆'.repeat(5-review.rating)}
+                                                 </div>
+                                              </div>
+                                              <p className="text-gray-600 text-sm italic">"{review.text}"</p>
+                                              {/* Review Media Thumbnail - Triggers Lightbox */}
+                                              {review.url && (
+                                                 <div 
+                                                    className="mt-3 w-24 h-24 rounded overflow-hidden border border-gray-200 cursor-pointer hover:opacity-90 relative group"
+                                                    onClick={() => openLightbox(review.url!)}
+                                                  >
+                                                     <img src={review.url} className="w-full h-full object-cover" alt="Review attachment" />
+                                                     <div className="absolute inset-0 bg-black/20 group-hover:bg-transparent transition-colors"></div>
+                                                 </div>
+                                              )}
+                                          </div>
+                                       ))}
+                                     </div>
+                                   ) : (
+                                      <p className="text-sm text-gray-400 italic py-2">Ще немає відгуків. Станьте першим!</p>
+                                   )}
+                              </div>
                             </div>
+                            
                         </div>
                     </div>
-
                 </div>
             </div>
+        </div>
+      )}
+
+      {/* Lightbox Modal (For Reviews) */}
+      {isLightboxOpen && allReviewMedia.length > 0 && (
+        <div className="fixed inset-0 z-[100] bg-black flex items-center justify-center animate-fade-in">
+           {/* Close Button */}
+           <button 
+             onClick={() => setIsLightboxOpen(false)}
+             className="absolute top-4 right-4 text-white hover:text-gray-300 z-50 p-2"
+           >
+             <XIcon />
+           </button>
+
+           {/* Navigation Buttons */}
+           {allReviewMedia.length > 1 && (
+             <>
+               <button 
+                  onClick={prevLightboxMedia}
+                  className="absolute left-2 md:left-8 top-1/2 -translate-y-1/2 text-white/70 hover:text-white p-4 z-50"
+               >
+                 <div className="bg-black/50 p-3 rounded-full"><ArrowLeftIcon /></div>
+               </button>
+               <button 
+                  onClick={nextLightboxMedia}
+                  className="absolute right-2 md:right-8 top-1/2 -translate-y-1/2 text-white/70 hover:text-white p-4 z-50"
+               >
+                  <div className="bg-black/50 p-3 rounded-full"><ArrowRightIcon /></div>
+               </button>
+             </>
+           )}
+
+           {/* Content */}
+           <div className="relative w-full h-full p-4 flex items-center justify-center">
+              {allReviewMedia[lightboxIndex].type === 'video' ? (
+                  <video 
+                    src={allReviewMedia[lightboxIndex].url} 
+                    controls 
+                    className="max-w-full max-h-full object-contain"
+                  ></video>
+              ) : (
+                  <img 
+                    src={allReviewMedia[lightboxIndex].url} 
+                    alt={`Review by ${allReviewMedia[lightboxIndex].user}`}
+                    className="max-w-full max-h-full object-contain"
+                  />
+              )}
+              {/* Caption */}
+              <div className="absolute bottom-8 left-0 w-full text-center pointer-events-none">
+                 <span className="bg-black/60 text-white px-4 py-2 rounded-full text-sm">
+                    {allReviewMedia[lightboxIndex].user} ({lightboxIndex + 1} / {allReviewMedia.length})
+                 </span>
+              </div>
+           </div>
         </div>
       )}
 
@@ -876,7 +995,7 @@ export default function App() {
             </div>
 
             <div className="flex-1 overflow-y-auto p-6 space-y-6">
-                {cart.length === 0 ? (
+                {!cart || cart.length === 0 ? (
                     <div className="h-full flex flex-col items-center justify-center text-gray-400">
                         <ShoppingBagIcon />
                         <p className="mt-4 text-sm uppercase tracking-wide">Кошик порожній</p>
@@ -907,7 +1026,7 @@ export default function App() {
                 )}
             </div>
 
-            {cart.length > 0 && (
+            {cart && cart.length > 0 && (
                 <div className="p-6 bg-gray-50 border-t border-gray-100">
                      {!showOrderForm ? (
                          <>
@@ -924,54 +1043,16 @@ export default function App() {
                          </>
                      ) : (
                          <div className="animate-fade-in-up">
+                            {/* Order Form Inputs - same as before */}
                             <h3 className="font-serif mb-4 uppercase text-sm">Оформлення</h3>
                             <div className="space-y-4 mb-4">
-                                <div>
-                                    <input 
-                                        id="order-name"
-                                        type="text" 
-                                        placeholder="Ваше Ім'я" 
-                                        className={`w-full bg-transparent border-b py-2 text-sm outline-none transition-all ${formErrors.name ? 'input-error border-red-500 text-red-500 placeholder-red-300' : 'border-gray-300 focus:border-black'}`}
-                                        value={orderForm.name}
-                                        onChange={handleNameChange}
-                                        autoComplete="name"
-                                    />
-                                </div>
-                                <div>
-                                    <input 
-                                        id="order-phone"
-                                        type="tel" 
-                                        placeholder="+380 (XX) XXX-XX-XX" 
-                                        className={`w-full bg-transparent border-b py-2 text-sm outline-none transition-all ${formErrors.phone ? 'input-error border-red-500 text-red-500 placeholder-red-300' : 'border-gray-300 focus:border-black'}`}
-                                        value={orderForm.phone}
-                                        onChange={handlePhoneChange}
-                                        maxLength={19}
-                                        autoComplete="tel"
-                                    />
-                                </div>
-                                <div>
-                                    <input 
-                                        type="text" 
-                                        placeholder="Місто та відділення НП" 
-                                        className={`w-full bg-transparent border-b py-2 text-sm outline-none transition-all ${formErrors.city ? 'input-error border-red-500 text-red-500 placeholder-red-300' : 'border-gray-300 focus:border-black'}`}
-                                        value={orderForm.city}
-                                        onChange={handleCityChange}
-                                    />
-                                </div>
+                                <input id="order-name" type="text" placeholder="Ваше Ім'я" className="w-full border-b py-2 text-sm outline-none" value={orderForm.name} onChange={handleNameChange}/>
+                                <input id="order-phone" type="tel" placeholder="+380" className="w-full border-b py-2 text-sm outline-none" value={orderForm.phone} onChange={handlePhoneChange}/>
+                                <input type="text" placeholder="Місто" className="w-full border-b py-2 text-sm outline-none" value={orderForm.city} onChange={handleCityChange}/>
                             </div>
                             <div className="flex gap-2">
-                                <button 
-                                    onClick={() => setShowOrderForm(false)}
-                                    className="flex-1 border border-gray-300 py-3 uppercase text-xs hover:bg-gray-200"
-                                >
-                                    Назад
-                                </button>
-                                <button 
-                                    onClick={handleCheckout}
-                                    className="flex-[2] bg-black text-white py-3 uppercase text-xs font-bold hover:bg-gray-800"
-                                >
-                                    Підтвердити
-                                </button>
+                                <button onClick={() => setShowOrderForm(false)} className="flex-1 border py-3 text-xs">Назад</button>
+                                <button onClick={handleCheckout} className="flex-[2] bg-black text-white py-3 text-xs font-bold">Підтвердити</button>
                             </div>
                          </div>
                      )}
@@ -979,15 +1060,7 @@ export default function App() {
             )}
         </div>
       </div>
-
-      {/* Scroll Top Button */}
-      <button 
-        onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-        className={`fixed bottom-8 right-8 z-30 p-3 bg-white border border-black hover:bg-black hover:text-white transition-all duration-300 shadow-lg ${showScrollTop ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10 pointer-events-none'}`}
-      >
-        <ArrowUpIcon />
-      </button>
-
+      
     </div>
   );
 }

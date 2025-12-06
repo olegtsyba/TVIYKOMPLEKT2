@@ -7,6 +7,13 @@ export interface Review {
   url?: string;
 }
 
+export interface SizeChartRow {
+  size: string;
+  bust: string;
+  waist: string;
+  hips: string;
+}
+
 export interface SizeChart {
   columns: string[];
   rows: string[][];
@@ -19,15 +26,16 @@ export interface RelatedColor {
 }
 
 export interface Product {
-  id: number | string; // Changed to support Firestore string IDs
+  id: number | string;
   title: string;
   price: number;
+  oldPrice?: number;
   images: string[];
   sizes: string[];
   colors: string[];
   videoId?: string;
-  sizeCategory?: string; // Links to global SIZE_CHARTS
-  sizeChart?: SizeChart; // Specific override
+  sizeCategory?: string;
+  sizeChart?: SizeChartRow[]; // New structure: Array of objects
   reviews?: Review[];
   relatedColors?: RelatedColor[];
   image?: string; // Legacy support
@@ -36,4 +44,11 @@ export interface Product {
 export interface CartItem extends Product {
   selectedSize: string;
   cartId: number;
+}
+
+export interface SiteSettings {
+  heroTitle: string;
+  heroSubtitle: string;
+  heroBackgroundUrl: string;
+  logoText: string;
 }

@@ -1,6 +1,6 @@
-import firebase from 'firebase/app';
-import 'firebase/firestore';
-import 'firebase/storage';
+import { initializeApp, getApps, getApp } from 'firebase/app';
+import { getFirestore } from 'firebase/firestore';
+import { getStorage } from 'firebase/storage';
 
 // Configuration from admin.html
 const firebaseConfig = {
@@ -14,11 +14,7 @@ const firebaseConfig = {
 };
 
 // Initialize Firebase (check if already initialized for hot-reload safety)
-if (!firebase.apps.length) {
-  firebase.initializeApp(firebaseConfig);
-} else {
-  firebase.app(); // if already initialized, use that one
-}
+const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 
-export const db = firebase.firestore();
-export const storage = firebase.storage();
+export const db = getFirestore(app);
+export const storage = getStorage(app);
