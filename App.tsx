@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import ReactDOM from 'react-dom/client';
 import { PRODUCTS, CATEGORIES, SIZE_CHARTS } from './constants';
@@ -51,7 +50,8 @@ const DEFAULT_SETTINGS: SiteSettings = {
   heroTitle: "NEW\nCOLLECTION",
   heroSubtitle: "Весна - Літо 2025",
   heroBackgroundUrl: "https://images.unsplash.com/photo-1483985988355-763728e1935b?q=80&w=2070&auto=format&fit=crop",
-  logoText: "TVIYKOMPLEKT"
+  logoText: "TVIYKOMPLEKT",
+  heroDescription: "Естетика. Комфорт. Впевненість. Одяг, який підкреслює твою індивідуальність."
 };
 
 interface LightboxItem {
@@ -79,8 +79,8 @@ export default function App() {
   const [notification, setNotification] = useState<{message: string, type: 'success' | 'error'} | null>(null);
   
   // Order Form State & Validation
-  const [orderForm, setOrderForm] = useState({ name: '', phone: '', city: '' });
-  const [formErrors, setFormErrors] = useState({ name: false, phone: false, city: false });
+  const [orderForm, setOrderForm] = useState({ firstName: '', lastName: '', phone: '', city: '', branch: '' });
+  const [formErrors, setFormErrors] = useState({ firstName: false, lastName: false, phone: false, city: false, branch: false });
   const [showOrderForm, setShowOrderForm] = useState(false);
   
   const [scrolled, setScrolled] = useState(false);
@@ -112,7 +112,16 @@ export default function App() {
           const settingsRef = doc(db, "settings", "site_content");
           const settingsSnap = await getDoc(settingsRef);
           if (settingsSnap.exists()) {
-            setSiteSettings({ ...DEFAULT_SETTINGS, ...settingsSnap.data() } as SiteSettings);
+             // Logic to handle potential reset of background URL
+            const data = settingsSnap.data();
+            const finalSettings = { 
+                ...DEFAULT_SETTINGS, 
+                ...data,
+                // Ensure if heroBackgroundUrl was deleted (undefined), we use the default
+                heroBackgroundUrl: data.heroBackgroundUrl || DEFAULT_SETTINGS.heroBackgroundUrl,
+                heroDescription: data.heroDescription || DEFAULT_SETTINGS.heroDescription
+            };
+            setSiteSettings(finalSettings as SiteSettings);
           }
         } catch (err) {
           console.warn("Could not fetch site settings, using defaults", err);
@@ -131,6 +140,7 @@ export default function App() {
             title: data.title,
             price: Number(data.price),
             oldPrice: data.oldPrice ? Number(data.oldPrice) : undefined,
+            isNew: data.isNew || false,
             images: Array.isArray(data.images) ? data.images : [],
             sizes: Array.isArray(data.sizes) ? data.sizes : ["S", "M", "L"],
             colors: Array.isArray(data.colors) ? data.colors.map((c: any) => c.name || c) : [],
@@ -283,18 +293,24 @@ export default function App() {
   const cartTotal = (cart || []).reduce((acc, item) => acc + item.price, 0);
 
   // Validation & Checkout
-  const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const val = e.target.value.replace(/[^a-zA-Zа-яА-ЯёЁіІїЇєЄґҐ\s-]/g, '');
-    setOrderForm(prev => ({ ...prev, name: val }));
-    if (formErrors.name) setFormErrors(prev => ({ ...prev, name: false }));
+  const handleInputChange = (field: string, value: string) => {
+    setOrderForm(prev => ({ ...prev, [field]: value }));
+    // @ts-ignore
+    if (formErrors[field]) setFormErrors(prev => ({ ...prev, [field]: false }));
   };
 
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     let val = e.target.value.replace(/\D/g, ''); 
+    
+    // Auto-prefix logic
     if (val.startsWith('0')) val = '38' + val;
-    else if (val.startsWith('80')) val = '3' + val;
+    if (val.startsWith('80')) val = '3' + val;
     if (val && !val.startsWith('380')) val = '380' + val;
+    
+    // Limit length
     val = val.substring(0, 12);
+    
+    // Formatting: +380 (XX) XXX-XX-XX
     let formatted = '';
     if (val.length > 0) formatted += '+' + val.substring(0, 3);
     if (val.length > 3) formatted += ' (' + val.substring(3, 5);
@@ -306,28 +322,33 @@ export default function App() {
     if (formErrors.phone) setFormErrors(prev => ({ ...prev, phone: false }));
   };
 
-  const handleCityChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-      setOrderForm(prev => ({ ...prev, city: e.target.value }));
-      if (formErrors.city) setFormErrors(prev => ({ ...prev, city: false }));
-  }
-
   const handleCheckout = async () => {
     const cleanPhone = orderForm.phone.replace(/\D/g, '');
-    const isNameValid = orderForm.name.trim().length >= 2;
+    const isFirstNameValid = orderForm.firstName.trim().length >= 2;
+    const isLastNameValid = orderForm.lastName.trim().length >= 2;
     const isPhoneValid = cleanPhone.length === 12; 
     const isCityValid = orderForm.city.trim().length > 0;
+    const isBranchValid = orderForm.branch.trim().length > 0;
 
-    if (!isNameValid || !isPhoneValid || !isCityValid) {
+    if (!isFirstNameValid || !isLastNameValid || !isPhoneValid || !isCityValid || !isBranchValid) {
         setFormErrors({
-            name: !isNameValid,
+            firstName: !isFirstNameValid,
+            lastName: !isLastNameValid,
             phone: !isPhoneValid,
-            city: !isCityValid
+            city: !isCityValid,
+            branch: !isBranchValid
         });
-        showToast("❌ Перевірте дані!", "error");
+        showToast("❌ Перевірте правильність даних!", "error");
         return;
     }
 
-    let message = `<b>📦 НОВЕ ЗАМОВЛЕННЯ!</b>\n\n👤 <b>Клієнт:</b> ${orderForm.name}\n📞 <b>Телефон:</b> ${orderForm.phone}\n🏙 <b>Адреса:</b> ${orderForm.city}\n\n🛒 <b>Товари:</b>\n`;
+    let message = `<b>📦 НОВЕ ЗАМОВЛЕННЯ!</b>\n\n`;
+    message += `👤 <b>Клієнт:</b> ${orderForm.firstName} ${orderForm.lastName}\n`;
+    message += `📞 <b>Телефон:</b> ${orderForm.phone}\n`;
+    message += `🏙 <b>Місто:</b> ${orderForm.city}\n`;
+    message += `🚚 <b>Відділення/Поштомат НП:</b> ${orderForm.branch}\n\n`;
+    message += `🛒 <b>Товари:</b>\n`;
+    
     (cart || []).forEach((item, index) => {
         message += `${index + 1}. ${item.title} (${item.selectedSize}) - ${item.price} грн\n`;
     });
@@ -345,10 +366,9 @@ export default function App() {
       });
 
       if (response.ok) {
-        showToast("✅ Замовлення прийнято!");
+        showToast("✅ Замовлення прийнято! Менеджер зв'яжеться з вами.");
         setCart([]);
-        setOrderForm({ name: '', phone: '', city: '' });
-        setFormErrors({ name: false, phone: false, city: false });
+        setOrderForm({ firstName: '', lastName: '', phone: '', city: '', branch: '' });
         setShowOrderForm(false);
         setIsCartOpen(false);
       } else {
@@ -487,8 +507,9 @@ export default function App() {
       {/* Hero Section */}
       <section className="relative h-[600px] md:h-[80vh] w-full bg-gray-900 overflow-hidden flex items-center justify-center md:justify-start">
         <div className="absolute inset-0 z-0">
+            {/* Background Image with Fallback */}
             <img 
-                src={siteSettings.heroBackgroundUrl} 
+                src={siteSettings.heroBackgroundUrl || DEFAULT_SETTINGS.heroBackgroundUrl} 
                 alt="Hero Background" 
                 className="w-full h-full object-cover opacity-80"
             />
@@ -497,12 +518,16 @@ export default function App() {
         
         <div className="relative z-10 px-6 md:pl-24 max-w-2xl text-center md:text-left">
             <div className="backdrop-blur-md bg-white/10 p-8 md:p-12 border border-white/20 shadow-2xl">
-                <span className="block text-xs md:text-sm tracking-[0.3em] text-white/90 mb-4 uppercase">{siteSettings.heroSubtitle}</span>
+                {/* STATIC CLASSES, DYNAMIC CONTENT */}
+                <span className="block text-xs md:text-sm tracking-[0.3em] text-white/90 mb-4 uppercase">
+                    {siteSettings.heroSubtitle || "Весна - Літо 2025"}
+                </span>
                 <h1 className="font-serif text-4xl md:text-6xl text-white font-bold mb-6 leading-tight whitespace-pre-line">
-                    {siteSettings.heroTitle}
+                    {siteSettings.heroTitle || "NEW\nCOLLECTION"}
                 </h1>
+                
                 <p className="text-white/80 mb-8 text-sm md:text-base leading-relaxed">
-                    Естетика. Комфорт. Впевненість. Одяг, який підкреслює твою індивідуальність.
+                    {siteSettings.heroDescription || "Естетика. Комфорт. Впевненість. Одяг, який підкреслює твою індивідуальність."}
                 </p>
                 <button 
                     onClick={() => document.getElementById('catalog')?.scrollIntoView({ behavior: 'smooth' })}
@@ -560,11 +585,20 @@ export default function App() {
                                     className="w-full h-full object-cover object-top transition-transform duration-700 group-hover:scale-105"
                                     loading="lazy"
                                 />
-                                {product.oldPrice && product.oldPrice > product.price && (
-                                    <div className="absolute top-2 right-2 bg-red-600 text-white text-[10px] font-bold px-2 py-1 uppercase">
-                                        SALE
-                                    </div>
-                                )}
+                                
+                                {/* Badges Container - Top Left Stacked */}
+                                <div className="absolute top-2 left-2 flex flex-col gap-1 items-start z-10">
+                                    {product.isNew && (
+                                         <div className="bg-black text-white text-[10px] font-bold px-2 py-1 uppercase tracking-widest shadow-sm">
+                                            NEW
+                                         </div>
+                                    )}
+                                    {product.oldPrice && product.oldPrice > product.price && (
+                                        <div className="bg-red-600 text-white text-[10px] font-bold px-2 py-1 uppercase tracking-widest shadow-sm">
+                                            SALE
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                             <h3 className="text-xs uppercase tracking-wide text-gray-900 truncate mb-1 pr-2">{product.title}</h3>
                             <div className="flex items-center gap-2">
@@ -932,7 +966,11 @@ export default function App() {
                                                         openLightbox(allReviewMedia, targetIndex !== -1 ? targetIndex : 0);
                                                     }}
                                                   >
-                                                     <img src={review.url} className="w-full h-full object-cover" alt="Review attachment" />
+                                                     {review.type === 'video' ? (
+                                                         <div className="w-full h-full bg-black flex items-center justify-center text-white"><PlayIcon /></div>
+                                                     ) : (
+                                                         <img src={review.url} className="w-full h-full object-cover" alt="Review attachment" />
+                                                     )}
                                                      <div className="absolute inset-0 bg-black/20 group-hover:bg-transparent transition-colors flex items-center justify-center">
                                                          <ZoomInIcon />
                                                      </div>
@@ -1035,6 +1073,7 @@ export default function App() {
                     <div className="h-full flex flex-col items-center justify-center text-gray-400">
                         <ShoppingBagIcon />
                         <p className="mt-4 text-sm uppercase tracking-wide">Кошик порожній</p>
+                        <button onClick={() => setIsCartOpen(false)} className="mt-4 border border-black px-6 py-2 text-xs uppercase hover:bg-black hover:text-white transition">Продовжити покупки</button>
                     </div>
                 ) : (
                     cart.map((item, idx) => (
@@ -1070,25 +1109,73 @@ export default function App() {
                                 <span>Разом:</span>
                                 <span>{cartTotal} UAH</span>
                             </div>
-                            <button 
-                                onClick={() => setShowOrderForm(true)}
-                                className="w-full bg-black text-white py-4 uppercase tracking-widest text-xs font-bold hover:bg-gray-800 transition-colors"
-                            >
-                                Оформити замовлення
-                            </button>
+                             <div className="space-y-3">
+                                <button 
+                                    onClick={() => setShowOrderForm(true)}
+                                    className="w-full bg-black text-white py-4 uppercase tracking-widest text-xs font-bold hover:bg-gray-800 transition-colors"
+                                >
+                                    Оформити замовлення
+                                </button>
+                                <button 
+                                    onClick={() => setIsCartOpen(false)}
+                                    className="w-full border border-gray-300 text-gray-600 py-3 uppercase tracking-widest text-xs font-bold hover:border-black hover:text-black transition-colors"
+                                >
+                                    Продовжити покупки
+                                </button>
+                             </div>
                          </>
                      ) : (
                          <div className="animate-fade-in-up">
-                            {/* Order Form Inputs - same as before */}
-                            <h3 className="font-serif mb-4 uppercase text-sm">Оформлення</h3>
+                            {/* Order Form Inputs - Extended */}
+                            <h3 className="font-serif mb-4 uppercase text-sm">Дані отримувача</h3>
                             <div className="space-y-4 mb-4">
-                                <input id="order-name" type="text" placeholder="Ваше Ім'я" className="w-full border-b py-2 text-sm outline-none" value={orderForm.name} onChange={handleNameChange}/>
-                                <input id="order-phone" type="tel" placeholder="+380" className="w-full border-b py-2 text-sm outline-none" value={orderForm.phone} onChange={handlePhoneChange}/>
-                                <input type="text" placeholder="Місто" className="w-full border-b py-2 text-sm outline-none" value={orderForm.city} onChange={handleCityChange}/>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div className="relative">
+                                        <input 
+                                            type="text" 
+                                            placeholder="Ім'я" 
+                                            className={`w-full border-b py-2 text-sm outline-none bg-transparent ${formErrors.firstName ? 'border-red-500 placeholder-red-400' : 'border-gray-300'}`} 
+                                            value={orderForm.firstName} 
+                                            onChange={(e) => handleInputChange('firstName', e.target.value)}
+                                        />
+                                    </div>
+                                    <div className="relative">
+                                        <input 
+                                            type="text" 
+                                            placeholder="Прізвище" 
+                                            className={`w-full border-b py-2 text-sm outline-none bg-transparent ${formErrors.lastName ? 'border-red-500 placeholder-red-400' : 'border-gray-300'}`} 
+                                            value={orderForm.lastName} 
+                                            onChange={(e) => handleInputChange('lastName', e.target.value)}
+                                        />
+                                    </div>
+                                </div>
+                                <input 
+                                    type="tel" 
+                                    placeholder="+380 (XX) XXX-XX-XX" 
+                                    className={`w-full border-b py-2 text-sm outline-none bg-transparent ${formErrors.phone ? 'border-red-500 placeholder-red-400' : 'border-gray-300'}`} 
+                                    value={orderForm.phone} 
+                                    onChange={handlePhoneChange}
+                                />
+                                <div className="space-y-3 pt-2">
+                                    <input 
+                                        type="text" 
+                                        placeholder="Місто / Населений пункт" 
+                                        className={`w-full border-b py-2 text-sm outline-none bg-transparent ${formErrors.city ? 'border-red-500 placeholder-red-400' : 'border-gray-300'}`} 
+                                        value={orderForm.city} 
+                                        onChange={(e) => handleInputChange('city', e.target.value)}
+                                    />
+                                    <input 
+                                        type="text" 
+                                        placeholder="Відділення Нової Пошти або Поштомат НП" 
+                                        className={`w-full border-b py-2 text-sm outline-none bg-transparent ${formErrors.branch ? 'border-red-500 placeholder-red-400' : 'border-gray-300'}`} 
+                                        value={orderForm.branch} 
+                                        onChange={(e) => handleInputChange('branch', e.target.value)}
+                                    />
+                                </div>
                             </div>
                             <div className="flex gap-2">
-                                <button onClick={() => setShowOrderForm(false)} className="flex-1 border py-3 text-xs">Назад</button>
-                                <button onClick={handleCheckout} className="flex-[2] bg-black text-white py-3 text-xs font-bold">Підтвердити</button>
+                                <button onClick={() => setShowOrderForm(false)} className="flex-1 border py-3 text-xs uppercase">Назад</button>
+                                <button onClick={handleCheckout} className="flex-[2] bg-black text-white py-3 text-xs font-bold uppercase">Підтвердити</button>
                             </div>
                          </div>
                      )}

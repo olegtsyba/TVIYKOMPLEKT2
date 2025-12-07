@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="uk">
 <head>
@@ -98,7 +97,11 @@
                 </div>
                 <div>
                     <label class="block text-xs font-bold uppercase text-gray-500 mb-2">Фонове фото (URL)</label>
-                    <input type="text" id="heroBackgroundUrl" class="w-full bg-gray-50 border border-gray-300 p-3 rounded text-sm focus:border-black outline-none">
+                    <input type="text" id="heroBackgroundUrl" class="w-full bg-gray-50 border border-gray-300 p-3 rounded text-sm focus:border-black outline-none mb-2">
+                    <label class="inline-flex items-center cursor-pointer">
+                        <input type="checkbox" id="resetHeroBg" class="w-4 h-4 text-red-600 border-gray-300 rounded focus:ring-red-500">
+                        <span class="ml-2 text-xs text-red-500 font-bold uppercase">Скинути фон (видалити URL)</span>
+                    </label>
                 </div>
                 <div>
                     <label class="block text-xs font-bold uppercase text-gray-500 mb-2">Підзаголовок (Subtitle)</label>
@@ -107,6 +110,10 @@
                 <div>
                     <label class="block text-xs font-bold uppercase text-gray-500 mb-2">Головний Заголовок (Title)</label>
                     <textarea id="heroTitle" class="w-full bg-gray-50 border border-gray-300 p-3 rounded text-sm focus:border-black outline-none h-20"></textarea>
+                </div>
+                <div class="md:col-span-2">
+                    <label class="block text-xs font-bold uppercase text-gray-500 mb-2">Опис (Description)</label>
+                    <textarea id="heroDescription" class="w-full bg-gray-50 border border-gray-300 p-3 rounded text-sm focus:border-black outline-none h-20" placeholder="Короткий опис під заголовком"></textarea>
                 </div>
             </div>
         </div>
@@ -136,6 +143,13 @@
                         <label class="block text-xs font-bold uppercase text-gray-500 mb-2 text-red-400">Стара ціна (для знижки)</label>
                         <input type="number" id="oldPrice" placeholder="0" 
                             class="w-full bg-gray-50 border border-gray-300 p-3 rounded focus:border-black outline-none">
+                    </div>
+
+                    <div class="flex flex-col justify-center pt-6">
+                        <label class="inline-flex items-center cursor-pointer">
+                            <input type="checkbox" id="isNew" class="w-5 h-5 text-black border-gray-300 rounded focus:ring-black">
+                            <span class="ml-2 text-xs font-bold uppercase text-gray-500">Позначити як "NEW"</span>
+                        </label>
                     </div>
 
                     <div>
@@ -283,7 +297,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
         import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js";
-        import { getFirestore, collection, addDoc, doc, getDoc, setDoc, updateDoc, deleteDoc, onSnapshot, serverTimestamp, query, orderBy } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
+        import { getFirestore, collection, addDoc, doc, getDoc, setDoc, updateDoc, deleteDoc, onSnapshot, serverTimestamp, query, orderBy, deleteField } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
         import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-storage.js";
 
         // CONFIG
@@ -455,6 +469,7 @@
                     document.getElementById('heroBackgroundUrl').value = data.heroBackgroundUrl || '';
                     document.getElementById('heroTitle').value = data.heroTitle || '';
                     document.getElementById('heroSubtitle').value = data.heroSubtitle || '';
+                    document.getElementById('heroDescription').value = data.heroDescription || '';
                 }
             } catch (e) {
                 console.error("Error loading settings", e);
@@ -464,16 +479,29 @@
         document.getElementById('saveSettingsBtn').addEventListener('click', async () => {
             toggleLoading('saveSettingsBtn', true, 'Збереження');
             try {
+                const shouldResetBg = document.getElementById('resetHeroBg').checked;
+                
                 const data = {
                     logoText: document.getElementById('logoText').value,
-                    heroBackgroundUrl: document.getElementById('heroBackgroundUrl').value,
                     heroTitle: document.getElementById('heroTitle').value,
                     heroSubtitle: document.getElementById('heroSubtitle').value,
+                    heroDescription: document.getElementById('heroDescription').value,
                     updatedAt: serverTimestamp()
                 };
+
+                if (shouldResetBg) {
+                    data.heroBackgroundUrl = deleteField();
+                    document.getElementById('heroBackgroundUrl').value = ""; // Clear input
+                    document.getElementById('resetHeroBg').checked = false; // Uncheck
+                } else {
+                    data.heroBackgroundUrl = document.getElementById('heroBackgroundUrl').value;
+                }
+
+                // Ensure merge: true to avoid overwriting existing fields
                 await setDoc(doc(db, "settings", "site_content"), data, { merge: true });
                 showToast("✅ Налаштування оновлено!");
             } catch (e) {
+                console.error(e);
                 showToast("❌ Помилка збереження", true);
             } finally {
                 toggleLoading('saveSettingsBtn', false, 'Зберегти налаштування');
@@ -671,6 +699,7 @@
                     <td class="p-4 font-medium">
                         ${p.title}
                         ${isLegacy ? '<span class="ml-2 bg-yellow-100 text-yellow-800 text-[10px] px-1 rounded">LEGACY</span>' : ''}
+                        ${p.isNew ? '<span class="ml-2 bg-black text-white text-[10px] px-1 rounded">NEW</span>' : ''}
                     </td>
                     <td class="p-4">
                         ${p.oldPrice ? `<span class="text-red-400 line-through text-xs mr-1">${p.oldPrice}</span>` : ''}
@@ -717,6 +746,7 @@
                     title: document.getElementById('title').value,
                     price: Number(document.getElementById('price').value),
                     oldPrice: document.getElementById('oldPrice').value ? Number(document.getElementById('oldPrice').value) : null,
+                    isNew: document.getElementById('isNew').checked,
                     category: document.getElementById('category').value,
                     sizeCategory: document.getElementById('sizeCategory').value,
                     videoId: document.getElementById('videoId').value || null,
@@ -780,6 +810,7 @@
             document.getElementById('title').value = productToEdit.title;
             document.getElementById('price').value = productToEdit.price;
             document.getElementById('oldPrice').value = productToEdit.oldPrice || '';
+            document.getElementById('isNew').checked = productToEdit.isNew || false;
             document.getElementById('category').value = productToEdit.category || 'Лосини';
             document.getElementById('sizeCategory').value = productToEdit.sizeCategory || 'default';
             document.getElementById('videoId').value = productToEdit.videoId || '';

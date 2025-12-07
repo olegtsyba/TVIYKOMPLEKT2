@@ -30,12 +30,13 @@ export interface Product {
   title: string;
   price: number;
   oldPrice?: number;
+  isNew?: boolean; // New field for "NEW" status
   images: string[];
   sizes: string[];
   colors: string[];
   videoId?: string;
   sizeCategory?: string;
-  sizeChart?: SizeChartRow[]; // New structure: Array of objects
+  sizeChart?: SizeChartRow[]; 
   reviews?: Review[];
   relatedColors?: RelatedColor[];
   image?: string; // Legacy support
@@ -50,5 +51,6 @@ export interface SiteSettings {
   heroTitle: string;
   heroSubtitle: string;
   heroBackgroundUrl: string;
+  heroDescription: string;
   logoText: string;
 }
