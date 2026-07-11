@@ -8,6 +8,12 @@ export default defineConfig(({ mode }) => {
       server: {
         port: 3000,
         host: '0.0.0.0',
+        proxy: {
+          '/api/keycrm': {
+            target: 'https://tviykomplekt-88100.web.app',
+            changeOrigin: true,
+          },
+        },
       },
       plugins: [react()],
       define: {

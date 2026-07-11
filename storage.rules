@@ -1,0 +1,38 @@
+rules_version = '2';
+
+// Confirmed live: the console's default test-mode rules (fully open to
+// anyone, gated only by an expiry date - 2026-01-04) were still in place and
+// have since expired, so production is currently fully locked (deny-all).
+// This file replaces that with permanent, path-scoped rules instead of
+// another time-boxed placeholder. "Admin" == any signed-in Firebase Auth user
+// (see the same note in firestore.rules - admin.html has no separate
+// role/claim system).
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // Deny everything by default; only the paths below are reachable.
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+
+    // Admin-uploaded product images (admin.html "Додати новий товар").
+    match /products/{allPaths=**} {
+      allow read: if true;
+      allow write, delete: if request.auth != null;
+    }
+
+    // Customer review photos (admin.html review uploader).
+    match /reviews/{allPaths=**} {
+      allow read: if true;
+      allow write, delete: if request.auth != null;
+    }
+
+    // Admin-only extra photos overlaid on the KeyCRM catalog
+    // (productMedia/{keycrmId}/{filename}), managed from the product modal
+    // in admin.html.
+    match /productMedia/{keycrmId}/{fileName} {
+      allow read: if true;
+      allow write, delete: if request.auth != null;
+    }
+  }
+}

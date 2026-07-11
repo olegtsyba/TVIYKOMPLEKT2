@@ -2,8 +2,10 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import ReactDOM from 'react-dom/client';
 import { PRODUCTS, CATEGORIES, SIZE_CHARTS } from './constants';
 import { Product, CartItem, SiteSettings, Review, SizeChartRow } from './types';
-import { collection, getDocs, query, orderBy, doc, getDoc } from 'firebase/firestore'; 
+import { doc, getDoc } from 'firebase/firestore';
 import { db } from './firebase';
+import { fetchAllKeycrmProducts, fetchOffersForProduct, mapKeycrmProduct, deriveVariants, getMinOfferPrice } from './services/keycrm';
+import { fetchActivePromotions, applyPromotion } from './services/promotions';
 
 // Icons using SVG components
 const SearchIcon = () => (
@@ -100,6 +102,7 @@ export default function App() {
   // References
   const searchInputRef = useRef<HTMLInputElement>(null);
   const searchContainerRef = useRef<HTMLDivElement>(null);
+  const variantsLoadedRef = useRef<Set<string>>(new Set());
 
   // Fetch Data Effect
   useEffect(() => {
@@ -127,33 +130,48 @@ export default function App() {
           console.warn("Could not fetch site settings, using defaults", err);
         }
 
-        // 2. Fetch Products
-        const productsRef = collection(db, "products");
-        const q = query(productsRef, orderBy("createdAt", "desc"));
-        const querySnapshot = await getDocs(q);
-        
-        const firebaseProducts: Product[] = querySnapshot.docs.map((doc: any) => {
-          const data = doc.data();
-          // Map Firestore loose data to Strict Product Type
-          return {
-            id: doc.id,
-            title: data.title,
-            price: Number(data.price),
-            oldPrice: data.oldPrice ? Number(data.oldPrice) : undefined,
-            isNew: data.isNew || false,
-            images: Array.isArray(data.images) ? data.images : [],
-            sizes: Array.isArray(data.sizes) ? data.sizes : ["S", "M", "L"],
-            colors: Array.isArray(data.colors) ? data.colors.map((c: any) => c.name || c) : [],
-            videoId: data.videoId || undefined,
-            sizeCategory: data.sizeCategory || 'default',
-            sizeChart: data.sizeChart || undefined, // Array of SizeChartRow
-            reviews: Array.isArray(data.reviews) ? data.reviews : [],
-            relatedColors: [], 
-          } as Product;
-        });
+        // 2. Fetch Products from KeyCRM (catalog) + Firestore (point discounts)
+        try {
+          const [kcProducts, promotions] = await Promise.all([
+            fetchAllKeycrmProducts(),
+            fetchActivePromotions(),
+          ]);
 
-        // 3. Merge with Static Products 
-        setAllProducts([...firebaseProducts, ...PRODUCTS]);
+          const products = kcProducts
+            .slice()
+            .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+            .map(mapKeycrmProduct);
+
+          // Render the grid immediately with what we have. A handful of KeyCRM
+          // products report min_price=0 on the list endpoint even though their
+          // offers carry real prices — those get patched in the background
+          // below so the first paint isn't blocked on extra requests.
+          setAllProducts(products.map(p => applyPromotion(p, promotions.get(String(p.id)))));
+
+          const zeroPriceProducts = products.filter(p => p.price === 0);
+          if (zeroPriceProducts.length > 0) {
+            void Promise.all(zeroPriceProducts.map(async (p) => {
+              try {
+                const offers = await fetchOffersForProduct(p.id);
+                const minPrice = getMinOfferPrice(offers);
+                const { sizes, colors } = deriveVariants(offers);
+                variantsLoadedRef.current.add(String(p.id));
+                if (minPrice === null) return;
+
+                setAllProducts(prev => prev.map(item => (
+                  String(item.id) === String(p.id)
+                    ? applyPromotion({ ...item, price: minPrice, sizes, colors }, promotions.get(String(p.id)))
+                    : item
+                )));
+              } catch (err) {
+                console.warn("Could not resolve price from offers for product", p.id, err);
+              }
+            }));
+          }
+        } catch (error) {
+          console.error("Error fetching KeyCRM catalog, falling back to static list", error);
+          setAllProducts(PRODUCTS);
+        }
       } catch (error) {
         console.error("Error fetching data:", error);
         setAllProducts(PRODUCTS);
@@ -210,6 +228,30 @@ export default function App() {
       setLightboxItems([]);
     }
   }, [selectedProduct]);
+
+  // Lazily load sizes/colors (KeyCRM offers) the first time a product is opened
+  useEffect(() => {
+    if (!selectedProduct) return;
+    const productKey = String(selectedProduct.id);
+    if (variantsLoadedRef.current.has(productKey)) return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const offers = await fetchOffersForProduct(selectedProduct.id);
+        const { sizes, colors } = deriveVariants(offers);
+        variantsLoadedRef.current.add(productKey);
+        if (cancelled) return;
+
+        setAllProducts(prev => prev.map(p => String(p.id) === productKey ? { ...p, sizes, colors } : p));
+        setSelectedProduct(prev => prev && String(prev.id) === productKey ? { ...prev, sizes, colors } : prev);
+      } catch (err) {
+        console.warn("Could not load product variants from KeyCRM", selectedProduct.id, err);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [selectedProduct?.id]);
 
   useEffect(() => {
     if (isSearchOpen && searchInputRef.current) {
@@ -595,7 +637,7 @@ export default function App() {
                                     )}
                                     {product.oldPrice && product.oldPrice > product.price && (
                                         <div className="bg-red-600 text-white text-[10px] font-bold px-2 py-1 uppercase tracking-widest shadow-sm">
-                                            SALE
+                                            {product.badgeText || 'SALE'}
                                         </div>
                                     )}
                                 </div>
@@ -784,6 +826,11 @@ export default function App() {
                                         <span className="text-lg text-gray-400 line-through">{selectedProduct.oldPrice} UAH</span>
                                      )}
                                     <p className={`text-xl font-bold ${selectedProduct.oldPrice ? 'text-red-600' : 'text-black'}`}>{selectedProduct.price} UAH</p>
+                                    {selectedProduct.oldPrice && selectedProduct.oldPrice > selectedProduct.price && (
+                                        <span className="bg-red-600 text-white text-[10px] font-bold px-2 py-1 uppercase tracking-widest">
+                                            {selectedProduct.badgeText || 'SALE'}
+                                        </span>
+                                    )}
                                 </div>
                             </div>
 

@@ -267,11 +267,15 @@
             </div>
         </form>
 
-        <!-- SECTION 3: PRODUCT LIST -->
+        <!-- SECTION 3: PRODUCT LIST (from KeyCRM) -->
         <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-             <div class="p-6 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
-                <h2 class="text-lg font-bold uppercase tracking-wider">Список товарів</h2>
-                <div class="text-xs text-gray-500">Всього: <span id="productCount">0</span></div>
+             <div class="p-6 border-b border-gray-200 bg-gray-50 flex flex-col md:flex-row md:justify-between md:items-center gap-3">
+                <div class="flex items-center gap-3">
+                    <h2 class="text-lg font-bold uppercase tracking-wider">Список товарів (KeyCRM)</h2>
+                    <div class="text-xs text-gray-500">Всього: <span id="productCount">0</span></div>
+                </div>
+                <input type="text" id="productSearchInput" placeholder="Пошук за назвою..."
+                    class="w-full md:w-72 bg-white border border-gray-300 p-2 rounded text-sm focus:border-black outline-none">
             </div>
             <div class="overflow-x-auto">
                 <table class="w-full text-left text-sm">
@@ -279,8 +283,8 @@
                         <tr>
                             <th class="p-4">Фото</th>
                             <th class="p-4">Назва</th>
+                            <th class="p-4">Артикул (ID)</th>
                             <th class="p-4">Ціна</th>
-                            <th class="p-4">ID</th>
                             <th class="p-4 text-right">Дії</th>
                         </tr>
                     </thead>
@@ -291,6 +295,119 @@
             </div>
         </div>
 
+        <!-- SECTION 4: PROMO DISCOUNTS (by KeyCRM article/id) -->
+        <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-200 mt-8">
+            <div class="flex justify-between items-center mb-6 border-b pb-2">
+                <h2 class="text-lg font-bold uppercase tracking-wider" id="promotionFormTitle">Точкова знижка (за артикулом KeyCRM)</h2>
+                <button type="button" id="resetPromotionFormBtn" class="hidden text-xs text-red-500 underline uppercase font-bold">Скинути / Відмінити</button>
+            </div>
+
+            <form id="promotionForm" class="space-y-6">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div>
+                        <label class="block text-xs font-bold uppercase text-gray-500 mb-2">Артикул (ID товару KeyCRM)</label>
+                        <input type="number" id="promoProductId" required placeholder="Напр: 141"
+                            class="w-full bg-gray-50 border border-gray-300 p-3 rounded focus:border-black outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold uppercase text-gray-500 mb-2">Стара ціна (закреслена)</label>
+                        <input type="number" id="promoOldPrice" placeholder="0"
+                            class="w-full bg-gray-50 border border-gray-300 p-3 rounded focus:border-black outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold uppercase text-gray-500 mb-2">Знижка, % (якщо стара ціна не вказана)</label>
+                        <input type="number" id="promoDiscountPercent" placeholder="0"
+                            class="w-full bg-gray-50 border border-gray-300 p-3 rounded focus:border-black outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold uppercase text-gray-500 mb-2">Текст бейджа</label>
+                        <input type="text" id="promoBadgeText" placeholder="SALE / Чорна пʼятниця / -20%"
+                            class="w-full bg-gray-50 border border-gray-300 p-3 rounded focus:border-black outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold uppercase text-gray-500 mb-2">Активна з (опційно)</label>
+                        <input type="date" id="promoActiveFrom"
+                            class="w-full bg-gray-50 border border-gray-300 p-3 rounded focus:border-black outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold uppercase text-gray-500 mb-2">Активна до (опційно)</label>
+                        <input type="date" id="promoActiveTo"
+                            class="w-full bg-gray-50 border border-gray-300 p-3 rounded focus:border-black outline-none">
+                    </div>
+                    <div class="flex flex-col justify-center pt-6">
+                        <label class="inline-flex items-center cursor-pointer">
+                            <input type="checkbox" id="promoIsActive" checked class="w-5 h-5 text-black border-gray-300 rounded focus:ring-black">
+                            <span class="ml-2 text-xs font-bold uppercase text-gray-500">Знижка активна</span>
+                        </label>
+                    </div>
+                </div>
+
+                <button type="submit" id="savePromotionBtn" class="w-full bg-black text-white py-4 text-sm font-bold uppercase tracking-widest hover:bg-gray-900 transition shadow-xl rounded-sm flex justify-center items-center gap-2">
+                    <span>Зберегти знижку</span>
+                </button>
+            </form>
+        </div>
+
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden mt-8">
+             <div class="p-6 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
+                <h2 class="text-lg font-bold uppercase tracking-wider">Активні та заплановані знижки</h2>
+                <div class="text-xs text-gray-500">Всього: <span id="promotionCount">0</span></div>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left text-sm">
+                    <thead class="bg-gray-100 text-gray-600 uppercase text-xs">
+                        <tr>
+                            <th class="p-4">Артикул</th>
+                            <th class="p-4">Стара ціна / %</th>
+                            <th class="p-4">Бейдж</th>
+                            <th class="p-4">Період</th>
+                            <th class="p-4">Статус</th>
+                            <th class="p-4 text-right">Дії</th>
+                        </tr>
+                    </thead>
+                    <tbody id="promotionsTableBody" class="divide-y divide-gray-100">
+                         <tr><td colspan="6" class="p-8 text-center text-gray-400">Завантаження...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- PRODUCT DETAIL MODAL: readonly KeyCRM info + admin-only extra photos -->
+    <div id="productModal" class="fixed inset-0 z-[70] hidden">
+        <div class="absolute inset-0 bg-black/70" onclick="window.closeProductModal()"></div>
+        <div class="relative bg-white w-full max-w-3xl mx-auto mt-10 mb-10 rounded-lg shadow-2xl max-h-[90vh] overflow-y-auto">
+            <button onclick="window.closeProductModal()" class="absolute top-4 right-4 text-gray-400 hover:text-black text-2xl leading-none z-10">&times;</button>
+
+            <!-- Readonly snapshot from KeyCRM (data already in memory - no extra request).
+                 NOTE: this is display-only. Writing changes back to KeyCRM (PUT /products/{id})
+                 is a separate, later feature - not implemented here. -->
+            <div class="p-6 border-b border-gray-200">
+                <h2 class="text-lg font-bold uppercase tracking-wider mb-4">Товар з KeyCRM</h2>
+                <div class="flex gap-4">
+                    <img id="modalProductImage" src="" class="w-24 h-28 object-cover rounded bg-gray-100 flex-shrink-0">
+                    <div class="text-sm space-y-1">
+                        <div class="font-bold" id="modalProductName"></div>
+                        <div class="text-gray-500 text-xs">Артикул (ID): <span id="modalProductId"></span></div>
+                        <div class="text-gray-500 text-xs">Ціна: <span id="modalProductPrice"></span></div>
+                        <div class="text-gray-500 text-xs">Категорія (ID): <span id="modalProductCategory"></span></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="p-6">
+                <h3 class="text-xs font-bold uppercase text-gray-500 mb-1">Додаткові фото</h3>
+                <p class="text-xs text-gray-400 mb-3">Зберігаються окремо в Firestore/Storage, поки не показуються на сайті.</p>
+                <div id="modalPhotosGrid" class="grid grid-cols-4 md:grid-cols-6 gap-2 mb-4">
+                    <p class="col-span-full text-xs text-gray-400 italic">Завантаження...</p>
+                </div>
+                <div class="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:bg-gray-50 transition cursor-pointer relative">
+                    <input type="file" id="modalPhotoInput" multiple accept="image/*" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer">
+                    <p class="text-sm text-gray-500" id="modalUploadLabel">Натисніть або перетягніть фото для завантаження</p>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- FIREBASE & LOGIC -->
@@ -298,7 +415,7 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
         import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js";
         import { getFirestore, collection, addDoc, doc, getDoc, setDoc, updateDoc, deleteDoc, onSnapshot, serverTimestamp, query, orderBy, deleteField } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
-        import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-storage.js";
+        import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-storage.js";
 
         // CONFIG
         const firebaseConfig = {
@@ -424,6 +541,15 @@
         let allProducts = [];
         let hasInitialized = false;
 
+        // KeyCRM catalog browser state (Section 3 - "Список товарів")
+        let keycrmProducts = [];
+        let productSearchQuery = '';
+
+        // Product detail modal state (KeyCRM readonly info + productMedia photos)
+        let currentModalProductId = null;
+        let currentModalPhotos = [];
+        let productMediaUnsubscribe = null;
+
         // UI HELPERS
         const showToast = (msg, isError = false) => {
             const toast = document.getElementById('toast');
@@ -455,7 +581,13 @@
             if (hasInitialized) return;
             hasInitialized = true;
             loadSettings();
-            subscribeToProducts();
+            // NOTE: "Список товарів" now browses the live KeyCRM catalog (see
+            // loadKeycrmProductsList below), not the old Firestore "products"
+            // collection. subscribeToProducts()/renderProductTable() below are
+            // left in place but unused for now, pending a decision on whether
+            // "Додати новий товар" keeps writing to Firestore or moves to KeyCRM.
+            loadKeycrmProductsList();
+            subscribeToPromotions();
         };
 
         // --- 1. SITE SETTINGS LOGIC ---
@@ -724,6 +856,77 @@
             });
         };
 
+        // --- 5b. KEYCRM CATALOG BROWSER (Section 3 - "Список товарів") ---
+
+        const fetchAllKeycrmProductsForAdmin = async () => {
+            const all = [];
+            let page = 1;
+            let lastPage = 1;
+            do {
+                const res = await fetch(`/api/keycrm/products?limit=50&page=${page}`);
+                if (!res.ok) throw new Error(`KeyCRM proxy /products failed (${res.status})`);
+                const data = await res.json();
+                all.push(...data.data);
+                lastPage = data.last_page;
+                page += 1;
+            } while (page <= lastPage);
+            return all.filter(p => !p.is_archived);
+        };
+
+        const renderKeycrmProductsTable = () => {
+            const tbody = document.getElementById('productsTableBody');
+            const q = productSearchQuery.trim().toLowerCase();
+            const filtered = q
+                ? keycrmProducts.filter(p => (p.name || '').toLowerCase().includes(q))
+                : keycrmProducts;
+
+            document.getElementById('productCount').innerText = `${filtered.length} / ${keycrmProducts.length}`;
+            tbody.innerHTML = '';
+
+            if (filtered.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" class="p-8 text-center text-gray-400">Товарів не знайдено</td></tr>';
+                return;
+            }
+
+            filtered.forEach(p => {
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-gray-50 transition border-b border-gray-100 cursor-pointer";
+                tr.onclick = () => window.openProductModal(p.id);
+                const price = p.min_price > 0 ? p.min_price : (p.max_price > 0 ? p.max_price : null);
+
+                tr.innerHTML = `
+                    <td class="p-4">
+                        <img src="${p.thumbnail_url || 'https://placehold.co/50'}" class="w-10 h-12 object-cover rounded bg-gray-200">
+                    </td>
+                    <td class="p-4 font-medium">${p.name}</td>
+                    <td class="p-4 text-gray-500 text-xs">${p.id}</td>
+                    <td class="p-4">
+                        ${price !== null ? `${price} грн` : '<span class="text-red-400 text-xs">перевірте офери</span>'}
+                    </td>
+                    <td class="p-4 text-right">
+                        <button onclick="event.stopPropagation(); window.prefillPromotionForProduct(${p.id})" class="text-blue-600 hover:text-black font-bold text-xs uppercase">Додати знижку</button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        };
+
+        const loadKeycrmProductsList = async () => {
+            try {
+                keycrmProducts = await fetchAllKeycrmProductsForAdmin();
+                renderKeycrmProductsTable();
+            } catch (err) {
+                console.error(err);
+                document.getElementById('productsTableBody').innerHTML =
+                    '<tr><td colspan="5" class="p-8 text-center text-red-500">Помилка завантаження каталогу KeyCRM</td></tr>';
+            }
+        };
+
+        document.getElementById('productSearchInput').addEventListener('input', (e) => {
+            productSearchQuery = e.target.value;
+            renderKeycrmProductsTable();
+        });
+
         // Form Submission (Create or Update)
         document.getElementById('productForm').addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -855,6 +1058,295 @@
         };
 
         document.getElementById('resetFormBtn').addEventListener('click', resetForm);
+
+        // --- 6. PROMOTIONS LOGIC (point discounts by KeyCRM product id) ---
+
+        let editingPromotionId = null; // Firestore doc id (== productId as string)
+        let allPromotions = [];
+
+        const isPromotionCurrentlyActive = (promo) => {
+            if (!promo.isActive) return false;
+            const now = Date.now();
+            if (promo.activeFrom && new Date(promo.activeFrom).getTime() > now) return false;
+            if (promo.activeTo && new Date(promo.activeTo).getTime() < now) return false;
+            return true;
+        };
+
+        const renderPromotionsTable = () => {
+            const tbody = document.getElementById('promotionsTableBody');
+            document.getElementById('promotionCount').innerText = allPromotions.length;
+            tbody.innerHTML = '';
+
+            if (allPromotions.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="p-8 text-center text-gray-400">Знижок ще немає</td></tr>';
+                return;
+            }
+
+            allPromotions.forEach(p => {
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-gray-50 transition border-b border-gray-100";
+                const period = [p.activeFrom || '…', p.activeTo || '…'].join(' – ');
+                const live = isPromotionCurrentlyActive(p);
+                tr.innerHTML = `
+                    <td class="p-4 font-medium">${p.docId}</td>
+                    <td class="p-4 text-xs">
+                        ${p.oldPrice ? `стара: ${p.oldPrice}` : ''}
+                        ${p.discountPercent ? `${p.oldPrice ? ' / ' : ''}-${p.discountPercent}%` : ''}
+                    </td>
+                    <td class="p-4 text-xs">${p.badgeText || 'SALE'}</td>
+                    <td class="p-4 text-xs text-gray-500">${period}</td>
+                    <td class="p-4">
+                        <span class="text-[10px] font-bold uppercase px-2 py-1 rounded ${live ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}">
+                            ${live ? 'Активна' : (p.isActive ? 'Заплановано' : 'Вимкнено')}
+                        </span>
+                    </td>
+                    <td class="p-4 text-right space-x-2">
+                        <button onclick="window.editPromotion('${p.docId}')" class="text-blue-600 hover:text-black font-bold text-xs uppercase">Ред.</button>
+                        <button onclick="window.togglePromotion('${p.docId}', ${p.isActive})" class="text-gray-500 hover:text-black font-bold text-xs uppercase">${p.isActive ? 'Викл.' : 'Вкл.'}</button>
+                        <button onclick="window.deletePromotion('${p.docId}')" class="text-red-400 hover:text-red-600 font-bold text-xs uppercase">Вид.</button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        };
+
+        const subscribeToPromotions = () => {
+            onSnapshot(collection(db, "promotions"), (snapshot) => {
+                allPromotions = snapshot.docs.map(d => ({ docId: d.id, ...d.data() }));
+                renderPromotionsTable();
+            });
+        };
+
+        document.getElementById('promotionForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const productId = document.getElementById('promoProductId').value.trim();
+            const oldPriceVal = document.getElementById('promoOldPrice').value;
+            const discountVal = document.getElementById('promoDiscountPercent').value;
+
+            if (!productId) {
+                showToast("Вкажіть артикул (ID) товару", true);
+                return;
+            }
+            if (!oldPriceVal && !discountVal) {
+                showToast("Вкажіть стару ціну АБО відсоток знижки", true);
+                return;
+            }
+
+            toggleLoading('savePromotionBtn', true, 'Збереження');
+            try {
+                const data = {
+                    productId,
+                    oldPrice: oldPriceVal ? Number(oldPriceVal) : null,
+                    discountPercent: discountVal ? Number(discountVal) : null,
+                    badgeText: document.getElementById('promoBadgeText').value.trim() || null,
+                    activeFrom: document.getElementById('promoActiveFrom').value || null,
+                    activeTo: document.getElementById('promoActiveTo').value || null,
+                    isActive: document.getElementById('promoIsActive').checked,
+                    updatedAt: serverTimestamp()
+                };
+
+                // Doc id == productId, so saving under a (possibly new) id upserts cleanly.
+                await setDoc(doc(db, "promotions", productId), data);
+                showToast("✅ Знижку збережено!");
+                resetPromotionForm();
+            } catch (err) {
+                console.error(err);
+                showToast("❌ Помилка: " + err.message, true);
+            } finally {
+                toggleLoading('savePromotionBtn', false, editingPromotionId ? 'Оновити знижку' : 'Зберегти знижку');
+            }
+        });
+
+        window.editPromotion = (docId) => {
+            const promo = allPromotions.find(p => p.docId === docId);
+            if (!promo) return;
+
+            editingPromotionId = docId;
+            document.getElementById('promotionFormTitle').innerText = `Редагування знижки: ${docId}`;
+            document.getElementById('resetPromotionFormBtn').classList.remove('hidden');
+
+            document.getElementById('promoProductId').value = promo.docId;
+            document.getElementById('promoProductId').disabled = true;
+            document.getElementById('promoOldPrice').value = promo.oldPrice || '';
+            document.getElementById('promoDiscountPercent').value = promo.discountPercent || '';
+            document.getElementById('promoBadgeText').value = promo.badgeText || '';
+            document.getElementById('promoActiveFrom').value = promo.activeFrom || '';
+            document.getElementById('promoActiveTo').value = promo.activeTo || '';
+            document.getElementById('promoIsActive').checked = promo.isActive !== false;
+
+            window.scrollTo({ top: document.getElementById('promotionForm').offsetTop - 20, behavior: 'smooth' });
+        };
+
+        // Called from the "Список товарів" (KeyCRM) table's "Додати знижку" button.
+        // Jumps straight to editing if this product already has a promotion,
+        // otherwise just prefills the article/id in a fresh form.
+        window.prefillPromotionForProduct = (productId) => {
+            const existing = allPromotions.find(p => p.docId === String(productId));
+            if (existing) {
+                window.editPromotion(existing.docId);
+                return;
+            }
+
+            resetPromotionForm();
+            document.getElementById('promoProductId').value = productId;
+            document.getElementById('promoProductId').focus();
+            window.scrollTo({ top: document.getElementById('promotionForm').offsetTop - 20, behavior: 'smooth' });
+        };
+
+        window.togglePromotion = async (docId, currentIsActive) => {
+            try {
+                await updateDoc(doc(db, "promotions", docId), { isActive: !currentIsActive, updatedAt: serverTimestamp() });
+            } catch (e) {
+                console.error(e);
+                showToast("Помилка оновлення статусу", true);
+            }
+        };
+
+        window.deletePromotion = async (docId) => {
+            if (confirm("Видалити знижку для артикулу " + docId + "?")) {
+                try {
+                    await deleteDoc(doc(db, "promotions", docId));
+                    showToast("🗑 Знижку видалено");
+                } catch (e) {
+                    showToast("Помилка видалення", true);
+                }
+            }
+        };
+
+        const resetPromotionForm = () => {
+            editingPromotionId = null;
+            document.getElementById('promotionForm').reset();
+            document.getElementById('promoProductId').disabled = false;
+            document.getElementById('promoIsActive').checked = true;
+            document.getElementById('promotionFormTitle').innerText = "Точкова знижка (за артикулом KeyCRM)";
+            document.getElementById('resetPromotionFormBtn').classList.add('hidden');
+        };
+
+        document.getElementById('resetPromotionFormBtn').addEventListener('click', resetPromotionForm);
+
+        // --- 7. PRODUCT DETAIL MODAL (KeyCRM readonly info + productMedia photos) ---
+        // First "overlay" layer over the KeyCRM catalog: a Firestore doc keyed by
+        // keycrmId (productMedia/{id}) holding admin-uploaded extra photos, stored
+        // in Storage under productMedia/{id}/{filename}. Same pattern as `promotions`.
+        // Not merged into the storefront (App.tsx) yet - admin-only for now.
+
+        const renderModalPhotos = () => {
+            const grid = document.getElementById('modalPhotosGrid');
+            grid.innerHTML = '';
+
+            if (currentModalPhotos.length === 0) {
+                grid.innerHTML = '<p class="col-span-full text-xs text-gray-400 italic">Додаткових фото ще немає</p>';
+                return;
+            }
+
+            currentModalPhotos.forEach((photo, idx) => {
+                const div = document.createElement('div');
+                div.className = 'relative aspect-[4/5] bg-gray-100 rounded overflow-hidden group';
+                div.innerHTML = `
+                    <img src="${photo.url}" class="w-full h-full object-cover">
+                    <button type="button" class="absolute top-1 right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition"
+                        onclick="window.deleteModalPhoto(${idx})">×</button>
+                `;
+                grid.appendChild(div);
+            });
+        };
+
+        window.openProductModal = (productId) => {
+            const product = keycrmProducts.find(p => p.id === productId);
+            if (!product) return;
+
+            currentModalProductId = productId;
+
+            // Readonly snapshot from KeyCRM - taken from the already-loaded
+            // keycrmProducts list, no extra request. NOTE: this is display-only;
+            // writing changes back to KeyCRM (PUT /products/{id}) would be a
+            // separate, later feature - not implemented here.
+            document.getElementById('modalProductImage').src = product.thumbnail_url || 'https://placehold.co/100';
+            document.getElementById('modalProductName').innerText = product.name;
+            document.getElementById('modalProductId').innerText = product.id;
+            document.getElementById('modalProductPrice').innerText = product.min_price > 0
+                ? `${product.min_price} грн`
+                : (product.max_price > 0 ? `${product.max_price} грн` : '—');
+            document.getElementById('modalProductCategory').innerText = product.category_id ?? '—';
+
+            document.getElementById('productModal').classList.remove('hidden');
+            document.getElementById('modalPhotosGrid').innerHTML = '<p class="col-span-full text-xs text-gray-400 italic">Завантаження...</p>';
+
+            if (productMediaUnsubscribe) productMediaUnsubscribe();
+            productMediaUnsubscribe = onSnapshot(doc(db, 'productMedia', String(productId)), (snap) => {
+                currentModalPhotos = snap.exists() && Array.isArray(snap.data().photos) ? snap.data().photos : [];
+                renderModalPhotos();
+            }, (err) => {
+                console.error(err);
+                document.getElementById('modalPhotosGrid').innerHTML = '<p class="col-span-full text-xs text-red-500">Помилка завантаження фото</p>';
+            });
+        };
+
+        window.closeProductModal = () => {
+            document.getElementById('productModal').classList.add('hidden');
+            if (productMediaUnsubscribe) {
+                productMediaUnsubscribe();
+                productMediaUnsubscribe = null;
+            }
+            currentModalProductId = null;
+            currentModalPhotos = [];
+            document.getElementById('modalPhotoInput').value = '';
+        };
+
+        window.deleteModalPhoto = async (idx) => {
+            const photo = currentModalPhotos[idx];
+            if (!photo || !currentModalProductId) return;
+            if (!confirm("Видалити це фото?")) return;
+
+            try {
+                await deleteObject(ref(storage, photo.storagePath));
+            } catch (err) {
+                console.warn("Storage file already missing or failed to delete", err);
+            }
+
+            const updatedPhotos = currentModalPhotos.filter((_, i) => i !== idx);
+            try {
+                await setDoc(doc(db, 'productMedia', String(currentModalProductId)), { photos: updatedPhotos }, { merge: true });
+                showToast("🗑 Фото видалено");
+            } catch (err) {
+                console.error(err);
+                showToast("Помилка видалення фото", true);
+            }
+        };
+
+        document.getElementById('modalPhotoInput').addEventListener('change', async (e) => {
+            const files = Array.from(e.target.files);
+            if (files.length === 0 || !currentModalProductId) return;
+
+            const productId = currentModalProductId;
+            const label = document.getElementById('modalUploadLabel');
+            const originalLabel = label.innerText;
+            label.innerText = `Завантаження ${files.length} фото...`;
+
+            try {
+                const newPhotos = [];
+                for (const file of files) {
+                    const storagePath = `productMedia/${productId}/${Date.now()}_${file.name}`;
+                    const storageRef = ref(storage, storagePath);
+                    await uploadBytes(storageRef, file);
+                    const url = await getDownloadURL(storageRef);
+                    // NOTE: serverTimestamp() is not allowed inside array elements in
+                    // Firestore, so we use a client-generated ISO string here instead.
+                    newPhotos.push({ url, storagePath, uploadedAt: new Date().toISOString() });
+                }
+
+                const updatedPhotos = [...currentModalPhotos, ...newPhotos];
+                await setDoc(doc(db, 'productMedia', String(productId)), { photos: updatedPhotos }, { merge: true });
+                showToast(`✅ Завантажено фото: ${files.length}`);
+            } catch (err) {
+                console.error(err);
+                showToast("Помилка завантаження фото", true);
+            } finally {
+                label.innerText = originalLabel;
+                e.target.value = '';
+            }
+        });
 
     </script>
 </body>

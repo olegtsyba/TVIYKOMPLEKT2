@@ -31,15 +31,26 @@ export interface Product {
   price: number;
   oldPrice?: number;
   isNew?: boolean; // New field for "NEW" status
+  badgeText?: string; // Custom promo badge (e.g. "-20%", "Чорна п'ятниця")
   images: string[];
   sizes: string[];
   colors: string[];
   videoId?: string;
   sizeCategory?: string;
-  sizeChart?: SizeChartRow[]; 
+  sizeChart?: SizeChartRow[];
   reviews?: Review[];
   relatedColors?: RelatedColor[];
   image?: string; // Legacy support
+}
+
+export interface Promotion {
+  productId: number | string; // KeyCRM product id
+  oldPrice?: number;
+  discountPercent?: number;
+  badgeText?: string;
+  activeFrom?: string; // ISO date
+  activeTo?: string; // ISO date
+  isActive: boolean;
 }
 
 export interface CartItem extends Product {
