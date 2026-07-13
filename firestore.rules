@@ -31,10 +31,10 @@ service cloud.firestore {
       allow write: if request.auth != null;
     }
 
-    // Admin-uploaded extra photos overlaid on the KeyCRM catalog, keyed by
-    // KeyCRM product id (admin.html product modal). Not read by the storefront
-    // yet, but public read is opened now so the planned App.tsx merge doesn't
-    // need another rules deploy later - it's just photo URLs, nothing sensitive.
+    // Admin-uploaded extra photos/videos overlaid on the KeyCRM catalog, keyed
+    // by KeyCRM product id (admin.html product modal). Read publicly by the
+    // storefront (App.tsx) to merge into the product gallery/video section -
+    // it's just media URLs, nothing sensitive.
     match /productMedia/{productId} {
       allow read: if true;
       allow write: if request.auth != null;

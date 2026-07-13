@@ -34,5 +34,14 @@ service firebase.storage {
       allow read: if true;
       allow write, delete: if request.auth != null;
     }
+
+    // Admin-only extra videos overlaid on the KeyCRM catalog
+    // (productMedia/{keycrmId}/videos/{filename}), managed from the product
+    // modal in admin.html. Separate match because the rule above only
+    // covers one path segment past {keycrmId}.
+    match /productMedia/{keycrmId}/videos/{fileName} {
+      allow read: if true;
+      allow write, delete: if request.auth != null;
+    }
   }
 }

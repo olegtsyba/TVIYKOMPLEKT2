@@ -398,13 +398,25 @@
 
             <div class="p-6">
                 <h3 class="text-xs font-bold uppercase text-gray-500 mb-1">Додаткові фото</h3>
-                <p class="text-xs text-gray-400 mb-3">Зберігаються окремо в Firestore/Storage, поки не показуються на сайті.</p>
+                <p class="text-xs text-gray-400 mb-3">Додаються до фотогалереї товару на сайті.</p>
                 <div id="modalPhotosGrid" class="grid grid-cols-4 md:grid-cols-6 gap-2 mb-4">
                     <p class="col-span-full text-xs text-gray-400 italic">Завантаження...</p>
                 </div>
                 <div class="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:bg-gray-50 transition cursor-pointer relative">
                     <input type="file" id="modalPhotoInput" multiple accept="image/*" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer">
                     <p class="text-sm text-gray-500" id="modalUploadLabel">Натисніть або перетягніть фото для завантаження</p>
+                </div>
+            </div>
+
+            <div class="p-6 border-t border-gray-200">
+                <h3 class="text-xs font-bold uppercase text-gray-500 mb-1">Відео-огляди</h3>
+                <p class="text-xs text-gray-400 mb-3">Формати mp4/mov/webm, до 200 МБ на файл.</p>
+                <div id="modalVideosGrid" class="grid grid-cols-2 md:grid-cols-3 gap-2 mb-4">
+                    <p class="col-span-full text-xs text-gray-400 italic">Завантаження...</p>
+                </div>
+                <div class="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:bg-gray-50 transition cursor-pointer relative">
+                    <input type="file" id="modalVideoInput" multiple accept="video/mp4,video/quicktime,video/webm" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer">
+                    <p class="text-sm text-gray-500" id="modalVideoUploadLabel">Натисніть або перетягніть відео для завантаження (до 200 МБ)</p>
                 </div>
             </div>
         </div>
@@ -545,10 +557,12 @@
         let keycrmProducts = [];
         let productSearchQuery = '';
 
-        // Product detail modal state (KeyCRM readonly info + productMedia photos)
+        // Product detail modal state (KeyCRM readonly info + productMedia photos/videos)
         let currentModalProductId = null;
         let currentModalPhotos = [];
+        let currentModalVideos = [];
         let productMediaUnsubscribe = null;
+        const MAX_VIDEO_SIZE_BYTES = 200 * 1024 * 1024;
 
         // UI HELPERS
         const showToast = (msg, isError = false) => {
@@ -1225,11 +1239,13 @@
 
         document.getElementById('resetPromotionFormBtn').addEventListener('click', resetPromotionForm);
 
-        // --- 7. PRODUCT DETAIL MODAL (KeyCRM readonly info + productMedia photos) ---
-        // First "overlay" layer over the KeyCRM catalog: a Firestore doc keyed by
-        // keycrmId (productMedia/{id}) holding admin-uploaded extra photos, stored
-        // in Storage under productMedia/{id}/{filename}. Same pattern as `promotions`.
-        // Not merged into the storefront (App.tsx) yet - admin-only for now.
+        // --- 7. PRODUCT DETAIL MODAL (KeyCRM readonly info + productMedia photos/videos) ---
+        // "Overlay" layer over the KeyCRM catalog: a Firestore doc keyed by
+        // keycrmId (productMedia/{id}) holding admin-uploaded extra photos and
+        // videos, stored in Storage under productMedia/{id}/{filename} and
+        // productMedia/{id}/videos/{filename} respectively. Same pattern as
+        // `promotions`. Both photos and videos are merged into the storefront
+        // gallery/video section in App.tsx.
 
         const renderModalPhotos = () => {
             const grid = document.getElementById('modalPhotosGrid');
@@ -1247,6 +1263,27 @@
                     <img src="${photo.url}" class="w-full h-full object-cover">
                     <button type="button" class="absolute top-1 right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition"
                         onclick="window.deleteModalPhoto(${idx})">×</button>
+                `;
+                grid.appendChild(div);
+            });
+        };
+
+        const renderModalVideos = () => {
+            const grid = document.getElementById('modalVideosGrid');
+            grid.innerHTML = '';
+
+            if (currentModalVideos.length === 0) {
+                grid.innerHTML = '<p class="col-span-full text-xs text-gray-400 italic">Відео ще немає</p>';
+                return;
+            }
+
+            currentModalVideos.forEach((video, idx) => {
+                const div = document.createElement('div');
+                div.className = 'relative aspect-video bg-black rounded overflow-hidden group';
+                div.innerHTML = `
+                    <video src="${video.url}" controls class="w-full h-full object-contain bg-black"></video>
+                    <button type="button" class="absolute top-1 right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition"
+                        onclick="window.deleteModalVideo(${idx})">×</button>
                 `;
                 grid.appendChild(div);
             });
@@ -1272,14 +1309,19 @@
 
             document.getElementById('productModal').classList.remove('hidden');
             document.getElementById('modalPhotosGrid').innerHTML = '<p class="col-span-full text-xs text-gray-400 italic">Завантаження...</p>';
+            document.getElementById('modalVideosGrid').innerHTML = '<p class="col-span-full text-xs text-gray-400 italic">Завантаження...</p>';
 
             if (productMediaUnsubscribe) productMediaUnsubscribe();
             productMediaUnsubscribe = onSnapshot(doc(db, 'productMedia', String(productId)), (snap) => {
-                currentModalPhotos = snap.exists() && Array.isArray(snap.data().photos) ? snap.data().photos : [];
+                const data = snap.exists() ? snap.data() : {};
+                currentModalPhotos = Array.isArray(data.photos) ? data.photos : [];
+                currentModalVideos = Array.isArray(data.videos) ? data.videos : [];
                 renderModalPhotos();
+                renderModalVideos();
             }, (err) => {
                 console.error(err);
                 document.getElementById('modalPhotosGrid').innerHTML = '<p class="col-span-full text-xs text-red-500">Помилка завантаження фото</p>';
+                document.getElementById('modalVideosGrid').innerHTML = '<p class="col-span-full text-xs text-red-500">Помилка завантаження відео</p>';
             });
         };
 
@@ -1291,7 +1333,9 @@
             }
             currentModalProductId = null;
             currentModalPhotos = [];
+            currentModalVideos = [];
             document.getElementById('modalPhotoInput').value = '';
+            document.getElementById('modalVideoInput').value = '';
         };
 
         window.deleteModalPhoto = async (idx) => {
@@ -1312,6 +1356,27 @@
             } catch (err) {
                 console.error(err);
                 showToast("Помилка видалення фото", true);
+            }
+        };
+
+        window.deleteModalVideo = async (idx) => {
+            const video = currentModalVideos[idx];
+            if (!video || !currentModalProductId) return;
+            if (!confirm("Видалити це відео?")) return;
+
+            try {
+                await deleteObject(ref(storage, video.storagePath));
+            } catch (err) {
+                console.warn("Storage file already missing or failed to delete", err);
+            }
+
+            const updatedVideos = currentModalVideos.filter((_, i) => i !== idx);
+            try {
+                await setDoc(doc(db, 'productMedia', String(currentModalProductId)), { videos: updatedVideos }, { merge: true });
+                showToast("🗑 Відео видалено");
+            } catch (err) {
+                console.error(err);
+                showToast("Помилка видалення відео", true);
             }
         };
 
@@ -1342,6 +1407,46 @@
             } catch (err) {
                 console.error(err);
                 showToast("Помилка завантаження фото", true);
+            } finally {
+                label.innerText = originalLabel;
+                e.target.value = '';
+            }
+        });
+
+        document.getElementById('modalVideoInput').addEventListener('change', async (e) => {
+            const files = Array.from(e.target.files);
+            if (files.length === 0 || !currentModalProductId) return;
+
+            const oversized = files.filter(f => f.size > MAX_VIDEO_SIZE_BYTES);
+            if (oversized.length > 0) {
+                showToast(`Файл "${oversized[0].name}" перевищує ліміт 200 МБ`, true);
+                e.target.value = '';
+                return;
+            }
+
+            const productId = currentModalProductId;
+            const label = document.getElementById('modalVideoUploadLabel');
+            const originalLabel = label.innerText;
+            label.innerText = `Завантаження ${files.length} відео...`;
+
+            try {
+                const newVideos = [];
+                for (const file of files) {
+                    const storagePath = `productMedia/${productId}/videos/${Date.now()}_${file.name}`;
+                    const storageRef = ref(storage, storagePath);
+                    await uploadBytes(storageRef, file);
+                    const url = await getDownloadURL(storageRef);
+                    // NOTE: serverTimestamp() is not allowed inside array elements in
+                    // Firestore, so we use a client-generated ISO string here instead.
+                    newVideos.push({ url, storagePath, uploadedAt: new Date().toISOString(), fileSizeBytes: file.size });
+                }
+
+                const updatedVideos = [...currentModalVideos, ...newVideos];
+                await setDoc(doc(db, 'productMedia', String(productId)), { videos: updatedVideos }, { merge: true });
+                showToast(`✅ Завантажено відео: ${files.length}`);
+            } catch (err) {
+                console.error(err);
+                showToast("Помилка завантаження відео", true);
             } finally {
                 label.innerText = originalLabel;
                 e.target.value = '';

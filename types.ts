@@ -41,6 +41,7 @@ export interface Product {
   reviews?: Review[];
   relatedColors?: RelatedColor[];
   image?: string; // Legacy support
+  extraVideos?: string[]; // Admin-uploaded video reviews (productMedia/{keycrmId}.videos)
 }
 
 export interface Promotion {

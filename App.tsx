@@ -6,6 +6,7 @@ import { doc, getDoc } from 'firebase/firestore';
 import { db } from './firebase';
 import { fetchAllKeycrmProducts, fetchOffersForProduct, mapKeycrmProduct, deriveVariants, getMinOfferPrice } from './services/keycrm';
 import { fetchActivePromotions, applyPromotion } from './services/promotions';
+import { fetchProductMediaMap, applyProductMedia } from './services/productMedia';
 
 // Icons using SVG components
 const SearchIcon = () => (
@@ -132,9 +133,10 @@ export default function App() {
 
         // 2. Fetch Products from KeyCRM (catalog) + Firestore (point discounts)
         try {
-          const [kcProducts, promotions] = await Promise.all([
+          const [kcProducts, promotions, productMedia] = await Promise.all([
             fetchAllKeycrmProducts(),
             fetchActivePromotions(),
+            fetchProductMediaMap(),
           ]);
 
           const products = kcProducts
@@ -146,7 +148,7 @@ export default function App() {
           // products report min_price=0 on the list endpoint even though their
           // offers carry real prices — those get patched in the background
           // below so the first paint isn't blocked on extra requests.
-          setAllProducts(products.map(p => applyPromotion(p, promotions.get(String(p.id)))));
+          setAllProducts(products.map(p => applyProductMedia(applyPromotion(p, promotions.get(String(p.id))), productMedia.get(String(p.id)))));
 
           const zeroPriceProducts = products.filter(p => p.price === 0);
           if (zeroPriceProducts.length > 0) {
@@ -976,6 +978,20 @@ export default function App() {
                                           allowFullScreen
                                       ></iframe>
                                    </div>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Extra Video Reviews (admin-uploaded, productMedia.videos) */}
+                            {selectedProduct.extraVideos && selectedProduct.extraVideos.length > 0 && (
+                              <div className="border-t border-gray-200 pt-4 pb-2">
+                                <p className="text-xs uppercase font-bold tracking-wider mb-3 flex items-center gap-2">
+                                  <PlayIcon /> Відео-огляди
+                                </p>
+                                <div className="space-y-3">
+                                  {selectedProduct.extraVideos.map((url, i) => (
+                                    <video key={i} src={url} controls playsInline className="w-full rounded-sm shadow-sm bg-black aspect-video" />
+                                  ))}
                                 </div>
                               </div>
                             )}
