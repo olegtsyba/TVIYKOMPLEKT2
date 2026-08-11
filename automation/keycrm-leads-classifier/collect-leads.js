@@ -6,8 +6,7 @@ const { ensureFreshSession } = require('../refresh-session');
 
 // ---------------------------------------------------------------------------
 // СЕЛЕКТОРИ. Підтверджені живою інспекцією DOM tviykomplekt.keycrm.app
-// (Element UI / Vue kanban-дошка лідів) — та сама дошка й модалка, що й у
-// keycrm-leads-classifier, тільки інша колонка.
+// (Element UI / Vue kanban-дошка лідів) через сесію користувача в Chrome.
 // ---------------------------------------------------------------------------
 const SELECTORS = {
   columnTitle: '.column-title__text',
@@ -64,9 +63,9 @@ async function scrollColumnToLoadAllCards(page, column, targetCount) {
   return count;
 }
 
-async function findOrderFormedColumnCards(page) {
-  console.log(`Шукаю колонку "${config.ORDER_FORMED_COLUMN_TITLE}"...`);
-  const columnTitle = page.locator(SELECTORS.columnTitle, { hasText: config.ORDER_FORMED_COLUMN_TITLE }).first();
+async function findRejectedColumnCards(page) {
+  console.log(`Шукаю колонку "${config.REJECTED_COLUMN_TITLE}"...`);
+  const columnTitle = page.locator(SELECTORS.columnTitle, { hasText: config.REJECTED_COLUMN_TITLE }).first();
   await columnTitle.waitFor({ state: 'visible', timeout: 30000 });
 
   const column = columnTitle.locator(`xpath=ancestor::*[contains(concat(" ", normalize-space(@class), " "), " lead-column ")][1]`);
@@ -230,7 +229,7 @@ async function main() {
     // чекаємо появи хоч однієї колонки замість довільної паузи.
     await page.locator(SELECTORS.columnTitle).first().waitFor({ state: 'visible', timeout: 30000 });
 
-    const { cards } = await findOrderFormedColumnCards(page);
+    const { cards } = await findRejectedColumnCards(page);
     const totalCards = await cards.count();
     const n = Math.min(config.CARDS_TO_COLLECT, totalCards);
     console.log(`Карток у колонці: ${totalCards}. Обробляю перші ${n}.`);
@@ -260,7 +259,7 @@ async function main() {
         await page.waitForTimeout(1000);
       } catch (err) {
         console.error(`  Помилка на картці #${i + 1}:`, err.message);
-        await saveDebugArtifacts(page, `order-${i + 1}-error`);
+        await saveDebugArtifacts(page, `card-${i + 1}-error`);
         await closeCard(page).catch(() => {});
         await page.waitForTimeout(1000);
       }

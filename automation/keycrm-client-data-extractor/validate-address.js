@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const config = require('./config');
+const { ensureFreshSession } = require('../refresh-session');
 
 // ---------------------------------------------------------------------------
 // Форма відповіді API підтверджена живим recon-запитом (GET, без побічних
@@ -234,6 +235,16 @@ async function main() {
   }
 
   fs.mkdirSync(config.DEBUG_DIR, { recursive: true });
+
+  if (fs.existsSync(config.STORAGE_STATE_PATH)) {
+    try {
+      await ensureFreshSession(config.STORAGE_STATE_PATH);
+    } catch (err) {
+      console.error(`Не вдалося перевірити/оновити сесію: ${err.message}`);
+      console.error('Онови сесію вручну: npm run login (або через DevTools Console).');
+      process.exit(1);
+    }
+  }
 
   const authToken = getAuthToken();
   const extractions = JSON.parse(fs.readFileSync(config.EXTRACTION_OUTPUT_PATH, 'utf-8'));
