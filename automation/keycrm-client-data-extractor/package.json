@@ -1,0 +1,24 @@
+{
+  "name": "keycrm-client-data-extractor",
+  "version": "1.0.0",
+  "description": "Standalone Playwright + Claude API automation for extracting and validating client data (name, phone, city, Nova Poshta warehouse) from KeyCRM order dialogs (staged: collect -> extract -> validate -> export, no autofill yet)",
+  "main": "index.js",
+  "scripts": {
+    "login": "node login.js",
+    "collect": "node collect-orders.js",
+    "extract": "node extract-client-data.js",
+    "validate": "node validate-address.js",
+    "export": "node export-readable.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.68.0"
+  },
+  "devDependencies": {
+    "dotenv": "^17.4.2",
+    "playwright": "^1.62.1"
+  }
+}
