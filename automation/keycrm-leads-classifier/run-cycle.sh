@@ -33,8 +33,8 @@ mkdir -p output
     exit "$CLASSIFY_STATUS"
   fi
 
-  echo "--- node apply-classification.js (режим визначає APPLY_LIVE у .env; за замовчуванням DRY-RUN) ---"
-  node apply-classification.js
+  echo "--- node apply-classification.js --batch-size=30 (режим визначає APPLY_LIVE у .env; за замовчуванням DRY-RUN) ---"
+  node apply-classification.js --batch-size=30
   APPLY_STATUS=$?
 
   echo "=== Цикл завершено: $(date -Iseconds), apply exit code: $APPLY_STATUS ==="

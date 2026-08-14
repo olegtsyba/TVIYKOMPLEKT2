@@ -2,6 +2,7 @@ require('dotenv').config({ path: require('path').join(__dirname, '.env') });
 const fs = require('fs');
 const { chromium } = require('playwright');
 const config = require('./config');
+const { notify } = require('../notify');
 
 // ---------------------------------------------------------------------------
 // ПРАПОРЦІ ЗАПУСКУ
@@ -10,10 +11,20 @@ const config = require('./config');
 // Реальні зміни в KeyCRM — тільки з explicit прапором --live або APPLY_LIVE=true.
 const LIVE_MODE = process.argv.includes('--live') || process.env.APPLY_LIVE === 'true';
 
-// --limit=N — обмежити кількість карток для обробки за цей запуск
-// (для контрольованого тестового прогону перед повною пачкою).
+// --limit=N — обмежити ЗАГАЛЬНУ кількість карток для обробки за цей запуск
+// (для контрольованого тестового прогону перед повною пачкою). За
+// замовчуванням обробляються всі high-confidence картки.
 const limitArg = process.argv.find((a) => a.startsWith('--limit='));
 const PROCESS_LIMIT = limitArg ? parseInt(limitArg.split('=')[1], 10) : Infinity;
+
+// --batch-size=N — розмір однієї партії в LIVE-режимі. Картки обробляються
+// послідовними партіями з паузою BATCH_PAUSE_MS між ними, щоб уникнути
+// одного суцільного проходу без контрольних точок: якщо колись зафіксується
+// аномально велика пачка або щось піде не так з підрахунком, збиток
+// обмежується однією партією, а не всім прогоном одразу.
+const batchSizeArg = process.argv.find((a) => a.startsWith('--batch-size='));
+const BATCH_SIZE = batchSizeArg ? parseInt(batchSizeArg.split('=')[1], 10) : 30;
+const BATCH_PAUSE_MS = 12000;
 
 // ---------------------------------------------------------------------------
 // СЕЛЕКТОРИ. Базові — ідентичні collect-leads.js. Додаткові (rejectButton,
@@ -26,7 +37,6 @@ const SELECTORS = {
   columnTitle: '.column-title__text',
   columnAncestor: '.lead-column',
   boardCard: '.lead-card.clickable',
-  cardTitle: '.lead-title',
   columnScrollContainer: '.column-content.scrollable',
   modal: '.el-dialog.lead-full-card',
   modalTitle: '.lead-title',
@@ -85,10 +95,21 @@ function loadItems() {
     );
   }
 
-  return classifications
-    .filter((c) => c.reason)
+  const withReason = classifications.filter((c) => c.reason);
+  const missingLeadId = withReason.filter((c) => !c.leadId);
+  if (missingLeadId.length) {
+    console.warn(
+      `Попередження: ${missingLeadId.length} карток без leadId (старий формат класифікації, до фіксу кешування) — ` +
+      `вони пропущені з обробки, щоб не шукати картку за іменем (ненадійно при однакових іменах):\n` +
+      missingLeadId.map((c) => `  #${c.cardIndex} ${c.customerName || '(без імені)'}`).join('\n')
+    );
+  }
+
+  return withReason
+    .filter((c) => c.leadId)
     .map((c) => ({
       cardIndex: c.cardIndex,
+      leadId: c.leadId,
       customerName: c.customerName || (dialogByIndex.get(c.cardIndex) || {}).customerName,
       reason: c.reason,
       confidence: c.confidence,
@@ -132,8 +153,8 @@ async function scrollColumnToLoadAllCards(page, column, targetCount) {
 }
 
 // Довантажує всі картки колонки один раз на старті (лінивий скрол), щоб
-// пошук за іменем клієнта (findCardIndexByName) бачив картки, що лежать
-// нижче початково відрендерених ~15.
+// пошук за leadId (findCardIndexById) бачив картки, що лежать нижче
+// початково відрендерених ~15.
 async function ensureAllCardsLoaded(page, column) {
   const totalBadgeText = await column.locator('.leads-total').first().innerText().catch(() => null);
   const totalBadge = totalBadgeText ? parseInt(totalBadgeText.trim(), 10) : null;
@@ -149,30 +170,21 @@ async function ensureAllCardsLoaded(page, column) {
 }
 
 // ЗАХИСТ ВІД ПОВТОРНОЇ ОБРОБКИ: картка ідентифікується заново, за поточним
-// станом DOM, безпосередньо перед відкриттям — а не за збереженим індексом
-// з моменту класифікації. Якщо картки з таким іменем більше немає в колонці
-// "Відхилити лід" — її вже кудись перемістили (вручну чи іншим запуском).
+// станом DOM, безпосередньо перед відкриттям — за стабільним leadId
+// (data-id картки в KeyCRM), а НЕ за збереженим позиційним індексом і НЕ за
+// іменем клієнта. Позиція зсувається щоразу, коли LIVE-прогін реально
+// видаляє картки з колонки; ім'я клієнта може повторюватись (кілька карток
+// з однаковим "Nina") — обидва варіанти ненадійні як ідентифікатор. Якщо
+// картки з таким leadId більше немає в колонці "Відхилити лід" — її вже
+// кудись перемістили (вручну чи іншим запуском).
 // Повертає:
-//   index >= 0  — знайдено рівно одну картку
+//   index >= 0  — знайдено рівно одну картку з таким leadId
 //   index === -1 — не знайдено (ймовірно вже оброблено)
-//   index === -2 — знайдено декілька карток з однаковим іменем (неоднозначність)
-async function findCardIndexByName(column, customerName) {
+async function findCardIndexById(column, leadId) {
   const cards = column.locator(SELECTORS.boardCard);
-  const titles = await cards.evaluateAll(
-    (els, titleSel) =>
-      els.map((el) => {
-        const t = el.querySelector(titleSel);
-        return t ? t.textContent.replace(/^\s*Чат\s*з\s*/i, '').trim() : null;
-      }),
-    SELECTORS.cardTitle
-  );
-
-  const matches = [];
-  titles.forEach((t, i) => { if (t === customerName) matches.push(i); });
-
-  if (matches.length === 0) return { index: -1, cards };
-  if (matches.length > 1) return { index: -2, cards };
-  return { index: matches[0], cards };
+  const ids = await cards.evaluateAll((els) => els.map((el) => el.getAttribute('data-id')));
+  const index = ids.indexOf(String(leadId));
+  return { index, cards };
 }
 
 async function openCardByIndex(cards, index) {
@@ -254,6 +266,7 @@ async function closeDropdownWithoutSelecting(page) {
 async function processCard(page, column, item, live) {
   const base = {
     cardIndex: item.cardIndex,
+    leadId: item.leadId,
     customerName: item.customerName,
     confidence: item.confidence,
     reason: item.reason,
@@ -263,19 +276,14 @@ async function processCard(page, column, item, live) {
   // Колонка — лінивий/віртуальний список: коли попередні картки в циклі
   // видаляються зі статусом, Vue може "згорнути" DOM назад до перших
   // ~15 елементів. Тому довантажуємо картки заново перед КОЖНИМ пошуком
-  // за іменем, а не лише один раз на старті всього прогону — інакше
+  // за leadId, а не лише один раз на старті всього прогону — інакше
   // картки нижче видимого вікна хибно позначаються як "not-found".
   await ensureAllCardsLoaded(page, column);
-  const { index, cards } = await findCardIndexByName(column, item.customerName);
+  const { index, cards } = await findCardIndexById(column, item.leadId);
 
   if (index === -1) {
     appendLog({ ...base, previousStatus: null, newStatus: null, result: 'skipped', note: 'not-found-in-column: картки більше немає в колонці "Відхилити лід" (ймовірно вже оброблено вручну або іншим запуском)' });
     console.log(`  ПРОПУЩЕНО — картки більше немає в колонці "${config.REJECTED_COLUMN_TITLE}"`);
-    return;
-  }
-  if (index === -2) {
-    appendLog({ ...base, previousStatus: config.REJECTED_COLUMN_TITLE, newStatus: null, result: 'skipped', note: 'ambiguous-duplicate-name: кілька карток з однаковим іменем клієнта, потрібен ручний розгляд' });
-    console.log(`  ПРОПУЩЕНО — неоднозначність (кілька карток з іменем "${item.customerName}")`);
     return;
   }
 
@@ -317,7 +325,7 @@ async function processCard(page, column, item, live) {
     await closeCard(page).catch(() => {});
     await page.waitForTimeout(500);
     await ensureAllCardsLoaded(page, column);
-    const verify = await findCardIndexByName(column, item.customerName);
+    const verify = await findCardIndexById(column, item.leadId);
     if (verify.index === -1) {
       appendLog({ ...base, previousStatus: config.REJECTED_COLUMN_TITLE, newStatus: item.reason, result: 'applied', note: 'підтверджено: картка зникла з колонки "Відхилити лід" після зміни статусу' });
       console.log(`  ЗАСТОСОВАНО — "${item.reason}"`);
@@ -349,7 +357,12 @@ async function main() {
 
   const items = loadItems();
   const { toProcess, skipped } = partitionByConfidence(items);
-  const limited = toProcess.slice(0, PROCESS_LIMIT);
+  const limited = Number.isFinite(PROCESS_LIMIT) ? toProcess.slice(0, PROCESS_LIMIT) : toProcess;
+
+  const batches = [];
+  for (let i = 0; i < limited.length; i += BATCH_SIZE) {
+    batches.push(limited.slice(i, i + BATCH_SIZE));
+  }
 
   console.log(`Завантажено карток з класифікацією: ${items.length}`);
   console.log(`Confidence "high" (кандидати на обробку): ${toProcess.length}`);
@@ -357,6 +370,7 @@ async function main() {
   if (Number.isFinite(PROCESS_LIMIT) && PROCESS_LIMIT < toProcess.length) {
     console.log(`Обмеження --limit=${PROCESS_LIMIT} — цей запуск обробить лише перші ${limited.length} з ${toProcess.length} карток high confidence.`);
   }
+  console.log(`Розбито на ${batches.length} парті${batches.length === 1 ? 'ю' : 'й'} по ≤${BATCH_SIZE} карток, пауза між партіями: ${BATCH_PAUSE_MS / 1000}с.`);
 
   if (LIVE_MODE) {
     console.log('\n' + '='.repeat(70));
@@ -372,6 +386,8 @@ async function main() {
     console.log('Для реального запуску: npm run apply -- --live\n');
   }
 
+  let processedCount = 0;
+
   console.log('Запускаю браузер зі збереженою сесією...');
   const browser = await chromium.launch({ headless: config.HEADLESS });
   const context = await browser.newContext({ storageState: config.STORAGE_STATE_PATH });
@@ -385,11 +401,20 @@ async function main() {
     const column = await getRejectedColumn(page);
     await ensureAllCardsLoaded(page, column);
 
-    for (let i = 0; i < limited.length; i++) {
-      const item = limited[i];
-      console.log(`\n[${i + 1}/${limited.length}] Картка #${item.cardIndex} — ${item.customerName} (${item.confidence}) → "${item.reason}"`);
-      await processCard(page, column, item, LIVE_MODE);
-      await page.waitForTimeout(500);
+    for (let b = 0; b < batches.length; b++) {
+      const batch = batches[b];
+      console.log(`\n=== Партія ${b + 1}/${batches.length} (карток: ${batch.length}) ===`);
+      for (let i = 0; i < batch.length; i++) {
+        const item = batch[i];
+        console.log(`\n[Партія ${b + 1}, ${i + 1}/${batch.length}] Картка #${item.cardIndex} — ${item.customerName} (${item.confidence}) → "${item.reason}"`);
+        await processCard(page, column, item, LIVE_MODE);
+        processedCount++;
+        await page.waitForTimeout(500);
+      }
+      if (b < batches.length - 1) {
+        console.log(`\nПауза ${BATCH_PAUSE_MS / 1000}с перед наступною партією (контрольна точка)...`);
+        await page.waitForTimeout(BATCH_PAUSE_MS);
+      }
     }
   } finally {
     await browser.close();
@@ -397,7 +422,7 @@ async function main() {
 
   console.log('\n=== Підсумок ===');
   console.log(`Режим: ${LIVE_MODE ? 'LIVE (реальні зміни застосовано)' : 'DRY-RUN (нічого не змінено)'}`);
-  console.log(`Оброблено спроб: ${limited.length} з ${toProcess.length} карток high confidence`);
+  console.log(`Оброблено спроб: ${processedCount} з ${toProcess.length} карток high confidence, за ${batches.length} парті${batches.length === 1 ? 'ю' : 'й'}`);
 
   if (skipped.length) {
     console.log(`\nПропущено через confidence (${skipped.length}) — потребують ручного розгляду:`);
@@ -405,9 +430,21 @@ async function main() {
   }
 
   console.log(`\nПовний лог дій: ${config.APPLY_LOG_PATH}`);
+  const modeLabel = LIVE_MODE ? 'LIVE' : 'DRY-RUN';
+  const batchWord = batches.length === 1 ? 'партію' : 'партій';
+  const limitNote = Number.isFinite(PROCESS_LIMIT) && PROCESS_LIMIT < toProcess.length
+    ? ` (обмежено --limit=${PROCESS_LIMIT})`
+    : '';
+  await notify(
+    `${modeLabel} — оброблено ${processedCount} карток загалом за ${batches.length} ${batchWord}.\n` +
+    `${LIVE_MODE ? 'Реальні зміни застосовано в KeyCRM.' : 'Жодних реальних змін не внесено.'}\n` +
+    `High confidence кандидатів: ${toProcess.length}${limitNote}` +
+    `${skipped.length ? `\nПропущено (потребують розгляду): ${skipped.length}` : ''}`
+  );
 }
 
-main().catch((err) => {
+main().catch(async (err) => {
+  await notify(`КРИТИЧНА ПОМИЛКА в apply-classification.js: ${err.message}`);
   console.error(err);
   process.exit(1);
 });

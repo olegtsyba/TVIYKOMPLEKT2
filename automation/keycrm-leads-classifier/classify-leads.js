@@ -153,16 +153,30 @@ async function main() {
   console.log(`Завантажено діалогів для класифікації: ${dialogs.length}`);
 
   // Відновлення після часткового збою (наприклад, вичерпання кредитів API
-  // посеред прогону): якщо для того самого cardIndex вже є успішний
-  // результат (reason не null) у поточному CLASSIFICATION_OUTPUT_PATH —
-  // не витрачаємо кредити повторно, переносимо його як є.
-  let resumedByIndex = new Map();
+  // посеред прогону): якщо для того самого leadId (стабільний ID картки в
+  // KeyCRM, не позиція в колонці) уже є успішний результат (reason не null)
+  // у поточному CLASSIFICATION_OUTPUT_PATH — не витрачаємо кредити повторно,
+  // переносимо його як є.
+  //
+  // КЛЮЧОВО: раніше кеш був keyed за cardIndex (позицією картки в DOM на
+  // момент збору). Це ламалось, щойно LIVE-прогін реально видаляв картки з
+  // колонки — позиції зсувались, і нова картка на старій позиції помилково
+  // "успадковувала" чужу стару класифікацію, ніколи не потрапляючи на
+  // реальний розгляд. leadId — стабільний ID ліда з KeyCRM (data-id картки /
+  // той самий ID, що в /leads/{id}) — не змінюється, поки картка не
+  // видалена, тож коректно відрізняє "цю саму картку знову" від "нового
+  // ліда, що просто зайняв стару позицію".
+  let resumedById = new Map();
   if (fs.existsSync(config.CLASSIFICATION_OUTPUT_PATH)) {
     try {
       const prev = JSON.parse(fs.readFileSync(config.CLASSIFICATION_OUTPUT_PATH, 'utf-8'));
-      resumedByIndex = new Map(prev.filter((r) => r.reason).map((r) => [r.cardIndex, r]));
-      if (resumedByIndex.size) {
-        console.log(`Знайдено ${resumedByIndex.size} вже успішно класифікованих карток у попередньому результаті — пропускаю їх.`);
+      resumedById = new Map(prev.filter((r) => r.reason && r.leadId).map((r) => [r.leadId, r]));
+      if (resumedById.size) {
+        console.log(`Знайдено ${resumedById.size} вже успішно класифікованих карток у попередньому результаті (за leadId) — пропускаю їх.`);
+      }
+      const legacyCount = prev.filter((r) => r.reason && !r.leadId).length;
+      if (legacyCount) {
+        console.log(`${legacyCount} записів у попередньому результаті без leadId (старий формат кешу) — будуть класифіковані заново.`);
       }
     } catch (err) {
       console.warn(`Не вдалося прочитати попередній ${config.CLASSIFICATION_OUTPUT_PATH}: ${err.message} — класифікую всі картки заново.`);
@@ -174,18 +188,21 @@ async function main() {
 
   for (let i = 0; i < dialogs.length; i++) {
     const dialog = dialogs[i];
-    const resumed = resumedByIndex.get(dialog.cardIndex);
+    const resumed = dialog.leadId ? resumedById.get(dialog.leadId) : null;
     if (resumed) {
-      console.log(`\n[${i + 1}/${dialogs.length}] ${dialog.customerName || '(без імені)'} — вже класифіковано раніше, пропускаю.`);
-      results.push(resumed);
+      console.log(`\n[${i + 1}/${dialogs.length}] ${dialog.customerName || '(без імені)'} (leadId: ${dialog.leadId}) — вже класифіковано раніше, пропускаю.`);
+      // cardIndex у зафіксованому записі оновлюємо на поточну позицію —
+      // сам запис (leadId, reason, confidence) лишається тим самим.
+      results.push({ ...resumed, cardIndex: dialog.cardIndex });
       continue;
     }
-    console.log(`\n[${i + 1}/${dialogs.length}] Класифікую діалог: ${dialog.customerName || '(без імені)'}...`);
+    console.log(`\n[${i + 1}/${dialogs.length}] Класифікую діалог: ${dialog.customerName || '(без імені)'} (leadId: ${dialog.leadId ?? '(немає)'})...`);
     try {
       const classification = await classifyDialog(client, dialog);
       console.log(`  Причина: ${classification.reason} (${classification.confidence})`);
       results.push({
         cardIndex: dialog.cardIndex,
+        leadId: dialog.leadId,
         customerName: dialog.customerName,
         reason: classification.reason,
         confidence: classification.confidence,
@@ -195,6 +212,7 @@ async function main() {
       console.error(`  Помилка класифікації: ${err.message}`);
       results.push({
         cardIndex: dialog.cardIndex,
+        leadId: dialog.leadId,
         customerName: dialog.customerName,
         reason: null,
         confidence: null,

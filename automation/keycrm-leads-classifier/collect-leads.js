@@ -239,8 +239,20 @@ async function main() {
     const n = Math.min(config.CARDS_TO_COLLECT, totalCards);
     console.log(`Карток у колонці: ${totalCards}. Обробляю перші ${n}.`);
 
+    // Стабільний ID ліда (той самий, що йде в API /leads/{id}) лежить прямо
+    // на картці kanban-дошки в data-id — читаємо його ДО відкриття модалок,
+    // одним проходом, щоб не гнатись за ним по одній картці. cardIndex
+    // (позиція в цьому конкретному зборі) лишається лише для логів/діагностики
+    // — ідентичність картки між прогонами визначає ВИКЛЮЧНО leadId, бо позиція
+    // зсувається щоразу, коли LIVE-прогін реально видаляє картки з колонки.
+    const leadIds = await cards.evaluateAll((els) => els.map((el) => el.getAttribute('data-id')));
+
     for (let i = 0; i < n; i++) {
-      console.log(`\n[${i + 1}/${n}] Відкриваю картку #${i + 1}...`);
+      const leadId = leadIds[i] || null;
+      console.log(`\n[${i + 1}/${n}] Відкриваю картку #${i + 1} (leadId: ${leadId ?? '(не знайдено)'})...`);
+      if (!leadId) {
+        console.warn(`  ПОПЕРЕДЖЕННЯ: не вдалося прочитати data-id картки — картка буде пропущена в кешуванні класифікації.`);
+      }
       try {
         await openCard(cards, i);
         await openCommunicationTab(page);
@@ -255,6 +267,7 @@ async function main() {
 
         results.push({
           cardIndex: i + 1,
+          leadId,
           customerName: dialog.customerName,
           messages: dialog.messages,
           rawText: dialog.rawText,
