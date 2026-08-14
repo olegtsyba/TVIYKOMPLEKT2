@@ -218,7 +218,10 @@ async function main() {
   }
 
   console.log('Запускаю браузер зі збереженою сесією...');
-  const browser = await chromium.launch({ headless: config.HEADLESS });
+  const browser = await chromium.launch({
+    headless: config.HEADLESS,
+    args: ['--disable-gpu', '--disable-dev-shm-usage'],
+  });
   const context = await browser.newContext({ storageState: config.STORAGE_STATE_PATH });
   const page = await context.newPage();
 
