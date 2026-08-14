@@ -1,0 +1,24 @@
+{
+  "name": "keycrm-leads-classifier",
+  "version": "1.0.0",
+  "description": "Standalone Playwright automation for collecting KeyCRM lead rejection dialogs (dry-run, no site code involved)",
+  "main": "index.js",
+  "scripts": {
+    "login": "node login.js",
+    "collect": "node collect-leads.js",
+    "classify": "node classify-leads.js",
+    "export": "node export-readable.js",
+    "apply": "node apply-classification.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.68.0"
+  },
+  "devDependencies": {
+    "dotenv": "^17.4.2",
+    "playwright": "^1.62.1"
+  }
+}
