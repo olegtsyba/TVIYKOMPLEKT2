@@ -2,6 +2,19 @@ require('dotenv').config({ path: require('path').join(__dirname, '.env') });
 const fs = require('fs');
 const Anthropic = require('@anthropic-ai/sdk');
 const config = require('./config');
+const { notify } = require('../notify');
+
+// Anthropic SDK не має окремого типізованого класу помилки для HTTP 402
+// (типізовані класи є лише для 400/401/403/404/409/422/429/5xx) — вичерпання
+// кредитів падає в базовий Anthropic.APIError з err.status === 402 і
+// err.error.error.type === 'billing_error'. Текстовий фрагмент — запасний
+// варіант на випадок, якщо форма помилки колись зміниться.
+function isCreditExhaustedError(err) {
+  if (err instanceof Anthropic.APIError && err.status === 402) return true;
+  if (err?.error?.error?.type === 'billing_error') return true;
+  if (typeof err?.message === 'string' && err.message.includes('credit balance is too low')) return true;
+  return false;
+}
 
 // claude-sonnet-5 — актуальний ідентифікатор моделі Sonnet на момент написання скрипта.
 const MODEL = 'claude-sonnet-5';
@@ -209,6 +222,21 @@ async function main() {
         rationale: classification.rationale,
       });
     } catch (err) {
+      if (isCreditExhaustedError(err)) {
+        // Вичерпання кредитів вплине однаково на КОЖНУ наступну картку —
+        // немає сенсу мовчки перебирати весь список, записуючи null для
+        // кожної (як робить generic-гілка нижче). Зупиняємось одразу,
+        // зберігаючи вже готові результати: наступний прогін підхопить їх
+        // із resume-кешу за leadId (див. вище) і не витратить кредити повторно.
+        fs.writeFileSync(config.CLASSIFICATION_OUTPUT_PATH, JSON.stringify(results, null, 2), 'utf-8');
+        console.error(`  ЗАКІНЧИЛИСЬ КРЕДИТИ ANTHROPIC: ${err.message}`);
+        await notify(
+          `🔴 ЗАКІНЧИЛИСЬ КРЕДИТИ ANTHROPIC, поповни баланс на https://platform.claude.com/settings/billing\n` +
+          `classify-leads.js зупинено на картці ${i + 1}/${dialogs.length} (${dialog.customerName || '(без імені)'}).\n` +
+          `Успішно класифіковано до зупинки: ${results.length}. Прогрес збережено — наступний запуск продовжить з цього місця.`
+        );
+        process.exit(1);
+      }
       console.error(`  Помилка класифікації: ${err.message}`);
       results.push({
         cardIndex: dialog.cardIndex,
@@ -235,7 +263,11 @@ async function main() {
   console.log(`\nЗбережено у: ${config.CLASSIFICATION_OUTPUT_PATH}`);
 }
 
-main().catch((err) => {
+main().catch(async (err) => {
   console.error(err);
+  const prefix = isCreditExhaustedError(err)
+    ? '🔴 ЗАКІНЧИЛИСЬ КРЕДИТИ ANTHROPIC, поповни баланс на https://platform.claude.com/settings/billing\n'
+    : '🔴 КРИТИЧНА ПОМИЛКА в classify-leads.js: ';
+  await notify(`${prefix}${err.message}`);
   process.exit(1);
 });
