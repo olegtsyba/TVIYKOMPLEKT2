@@ -341,6 +341,23 @@ async function processCard(page, column, item, live) {
   }
 }
 
+// Сповіщення показує перелік пропущених карток (не тільки цифру), щоб
+// власник міг переслати список менеджерам без заходу в KeyCRM. При великій
+// кількості — перші MAX_SKIPPED_IN_NOTIFY + примітка про повний список у
+// classification_results.json, щоб повідомлення в Telegram не роздувалось.
+const MAX_SKIPPED_IN_NOTIFY = 15;
+
+function formatSkippedForNotify(skipped) {
+  if (!skipped.length) return '';
+  const shown = skipped.slice(0, MAX_SKIPPED_IN_NOTIFY);
+  const lines = shown.map((s) => `  ${s.customerName} — ${s.reason} (${s.confidence})`);
+  let text = `\nПропущено (потребують розгляду): ${skipped.length}\n${lines.join('\n')}`;
+  if (skipped.length > MAX_SKIPPED_IN_NOTIFY) {
+    text += `\n  ...і ще ${skipped.length - MAX_SKIPPED_IN_NOTIFY} карток, повний список у ${config.CLASSIFICATION_OUTPUT_PATH}`;
+  }
+  return text;
+}
+
 // ---------------------------------------------------------------------------
 // main
 // ---------------------------------------------------------------------------
@@ -439,7 +456,7 @@ async function main() {
     `${modeLabel} — оброблено ${processedCount} карток загалом за ${batches.length} ${batchWord}.\n` +
     `${LIVE_MODE ? 'Реальні зміни застосовано в KeyCRM.' : 'Жодних реальних змін не внесено.'}\n` +
     `High confidence кандидатів: ${toProcess.length}${limitNote}` +
-    `${skipped.length ? `\nПропущено (потребують розгляду): ${skipped.length}` : ''}`
+    formatSkippedForNotify(skipped)
   );
 }
 

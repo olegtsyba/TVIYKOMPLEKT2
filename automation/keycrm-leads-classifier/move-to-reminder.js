@@ -23,6 +23,22 @@ const SOURCE_COLUMN_TITLE = 'Відхилити лід';
 const TARGET_COLUMN_TITLE = 'Нагадати';
 const LEADS_API_BASE = 'https://tviykomplekt.api.keycrm.app';
 
+// Той самий поріг і формат, що й у apply-classification.js
+// (formatSkippedForNotify) — для узгодженості обох сповіщень: перелік
+// карток поіменно замість голої цифри, з обрізанням при великій кількості.
+const MAX_LISTED_IN_NOTIFY = 15;
+
+function formatMovedForNotify(items) {
+  if (!items.length) return '';
+  const shown = items.slice(0, MAX_LISTED_IN_NOTIFY);
+  const lines = shown.map((i) => `  ${i.customerName} — ${i.reason} (${i.confidence})`);
+  let text = `\n${lines.join('\n')}`;
+  if (items.length > MAX_LISTED_IN_NOTIFY) {
+    text += `\n  ...і ще ${items.length - MAX_LISTED_IN_NOTIFY} карток, повний список у ${MOVE_LOG_PATH}`;
+  }
+  return text;
+}
+
 // ---------------------------------------------------------------------------
 // КРИТЕРІЙ ВІДБОРУ: rationale має містити один із МАРКЕРІВ, які правила 3
 // і 10 промпту явно вставляють за інструкцією (не вільна інтерпретація
@@ -359,11 +375,15 @@ async function main() {
     await ensureAllCardsLoaded(page, sourceColumn);
 
     const counts = { applied: 0, 'applied-unverified': 0, 'would-move': 0, skipped: 0, error: 0 };
+    const movedItems = []; // applied/applied-unverified (live) або would-move (dry-run) — для поіменного списку в notify()
     for (let i = 0; i < limited.length; i++) {
       const item = limited[i];
       console.log(`\n[${i + 1}/${limited.length}] Картка #${item.cardIndex} — ${item.customerName} (${item.confidence})`);
       const outcome = await processCard(page, sourceColumn, targetStatusId, item, LIVE_MODE);
       counts[outcome.result] = (counts[outcome.result] || 0) + 1;
+      if (['applied', 'applied-unverified', 'would-move'].includes(outcome.result)) {
+        movedItems.push({ customerName: item.customerName, reason: item.reason, confidence: item.confidence });
+      }
       if (outcome.column) sourceColumn = outcome.column; // після live-переносу сторінка була перезавантажена
       await page.waitForTimeout(500);
     }
@@ -379,8 +399,9 @@ async function main() {
       `${LIVE_MODE ? '🔴' : '⚪'} move-to-reminder.js — ${modeLabel}\n` +
       `Кандидатів (маркер rule 3/10 у rationale): ${candidates.length}\n` +
       `${LIVE_MODE ? 'Перенесено в "Нагадати"' : 'Буде перенесено (dry-run)'}: ${LIVE_MODE ? appliedTotal : counts['would-move']}` +
-      `${counts['applied-unverified'] ? ` (з них ${counts['applied-unverified']} без підтвердження — перевір вручну)` : ''}\n` +
-      `Пропущено (вже оброблено): ${counts.skipped}` +
+      `${counts['applied-unverified'] ? ` (з них ${counts['applied-unverified']} без підтвердження — перевір вручну)` : ''}` +
+      formatMovedForNotify(movedItems) +
+      `\nПропущено (вже оброблено): ${counts.skipped}` +
       `${counts.error ? `\nПомилок: ${counts.error} — перевір лог ${MOVE_LOG_PATH}` : ''}`
     );
   } catch (err) {
