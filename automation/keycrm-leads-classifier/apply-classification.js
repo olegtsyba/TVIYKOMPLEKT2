@@ -9,7 +9,18 @@ const { notify } = require('../notify');
 // ---------------------------------------------------------------------------
 // За замовчуванням — DRY-RUN (нічого не клікає, тільки показує намір).
 // Реальні зміни в KeyCRM — тільки з explicit прапором --live або APPLY_LIVE=true.
-const LIVE_MODE = process.argv.includes('--live') || process.env.APPLY_LIVE === 'true';
+const EXPLICIT_LIVE_FLAG = process.argv.includes('--live');
+const ENV_LIVE = process.env.APPLY_LIVE === 'true';
+const LIVE_MODE = EXPLICIT_LIVE_FLAG || ENV_LIVE;
+
+// Свідоме рішення (див. run-cycle.sh): APPLY_LIVE=true в .env лишається
+// постійно увімкненим для крону, а не тимчасовим прапором. Але це означає,
+// що ручний тестовий запуск (з інтерактивного термінала, без --live) теж
+// піде в LIVE — непомітно, якщо не зазирнути в логи постфактум. TTY —
+// найпростіший доступний сигнал "ручний запуск": run-cycle.sh завжди
+// редіректить stdout у файл (`>> "$LOG"`), тому там process.stdout.isTTY
+// завжди false; у звичайному терміналі — true.
+const LIKELY_MANUAL_RUN = Boolean(process.stdout.isTTY);
 
 // --limit=N — обмежити ЗАГАЛЬНУ кількість карток для обробки за цей запуск
 // (для контрольованого тестового прогону перед повною пачкою). За
@@ -388,6 +399,15 @@ async function main() {
     console.log(`Обмеження --limit=${PROCESS_LIMIT} — цей запуск обробить лише перші ${limited.length} з ${toProcess.length} карток high confidence.`);
   }
   console.log(`Розбито на ${batches.length} парті${batches.length === 1 ? 'ю' : 'й'} по ≤${BATCH_SIZE} карток, пауза між партіями: ${BATCH_PAUSE_MS / 1000}с.`);
+
+  if (LIVE_MODE && ENV_LIVE && !EXPLICIT_LIVE_FLAG && LIKELY_MANUAL_RUN) {
+    console.log('\n' + '\x1b[1m' + '#'.repeat(70) + '\x1b[0m');
+    console.log('\x1b[1mУВАГА: LIVE-режим активний через .env (APPLY_LIVE=true),\x1b[0m');
+    console.log('\x1b[1mнавіть без --live прапора!\x1b[0m');
+    console.log('Це навмисне налаштування для run-cycle.sh (крону), але воно діє');
+    console.log('так само і для цього ручного запуску з термінала.');
+    console.log('\x1b[1m' + '#'.repeat(70) + '\x1b[0m');
+  }
 
   if (LIVE_MODE) {
     console.log('\n' + '='.repeat(70));
