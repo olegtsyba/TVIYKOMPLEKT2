@@ -43,6 +43,10 @@ function notify(text) {
         resolve(res.statusCode === 200);
       });
     });
+    req.setTimeout(15000, () => {
+      logLine('⚠️ Telegram ПОМИЛКА: таймаут запиту (15с) — обрив зʼєднання');
+      req.destroy();
+    });
     req.on('error', (err) => {
       logLine(`⚠️ Telegram ПОМИЛКА ЗАПИТУ: ${err.message}`);
       resolve(false);
