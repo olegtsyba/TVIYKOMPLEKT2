@@ -2,8 +2,10 @@ const path = require('path');
 
 module.exports = {
   BASE_URL: 'https://tviykomplekt.keycrm.app',
+  API_BASE_URL: 'https://tviykomplekt.api.keycrm.app',
   LOGIN_URL: 'https://tviykomplekt.keycrm.app/login',
   LEADS_URL: 'https://tviykomplekt.keycrm.app/app/leads',
+  ORDERS_URL: 'https://tviykomplekt.keycrm.app/app/orders/',
   STORAGE_STATE_PATH: path.join(__dirname, 'storage-state.json'),
   OUTPUT_DIR: path.join(__dirname, 'output'),
   OUTPUT_PATH: path.join(__dirname, 'output', 'leads_dialogs.json'),
