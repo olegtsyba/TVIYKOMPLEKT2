@@ -115,6 +115,13 @@ const TERMINAL_RESULTS = new Set([
   'cancelled-after-duplicate',
 ]);
 
+// Окрема, НЕ термінальна позначка (не входить у TERMINAL_RESULTS) — лише
+// щоб не слати повторне сповіщення про того самого кандидата щоразу.
+// Навмисно не блокує звичайну обробку кандидата (recordResult не додає її
+// в journalMap, бо вона не в TERMINAL_RESULTS) — це суто для дедуплікації
+// самого сповіщення, читається окремо через loadFeedbackReviewAlertSet().
+const FEEDBACK_REVIEW_ALERT_RESULT = 'feedback-review-alert-sent';
+
 const SELECTORS = {
   quickSearchInput: 'input[placeholder="Швидкий пошук"]',
   orderRowExpandIcon: '.la-angle-right',
@@ -197,6 +204,31 @@ function loadJournal() {
     }
   }
   return map;
+}
+
+// ---------------------------------------------------------------------------
+// Окремий прохід по тому самому журналу — які кандидати "статус з
+// afterDuplicateStatus" (зараз тільки "Фідбек відмова") вже отримали
+// попереджувальне Telegram-сповіщення раніше. Навмисно окремо від
+// loadJournal()/journalMap, бо FEEDBACK_REVIEW_ALERT_RESULT не термінальний
+// і не повинен впливати на звичайну логіку "чи вже перевірено це
+// повідомлення".
+// ---------------------------------------------------------------------------
+function loadFeedbackReviewAlertSet() {
+  const set = new Set();
+  if (!fs.existsSync(LOG_PATH)) return set;
+  const lines = fs.readFileSync(LOG_PATH, 'utf-8').split('\n').filter(Boolean);
+  for (const line of lines) {
+    try {
+      const entry = JSON.parse(line);
+      if (entry.result === FEEDBACK_REVIEW_ALERT_RESULT) {
+        set.add(journalKey(entry.orderNumber, entry.status, 'feedback-review-alert'));
+      }
+    } catch {
+      // пошкоджений рядок логу — ігноруємо, не валимо весь скрипт
+    }
+  }
+  return set;
 }
 
 function recordResult(journalMap, entry) {
@@ -604,6 +636,47 @@ async function main() {
       return false;
     });
     console.log(`Після виключення вже перевірених (журнал): ${stillRelevant.length}`);
+
+    // ---------------------------------------------------------------------
+    // Окреме, помітне сповіщення для статусів з afterDuplicateStatus (зараз
+    // лише "Фідбек відмова") — щоб власниця одразу помітила ПЕРШИЙ живий
+    // приклад цього статусу серед звичайних cron-прогонів і встигла
+    // перевірити changeOrderStatus()/логіку "Скасовано" до першого --live.
+    // Спрацьовує і в dry-run (сам факт "кандидат існує" не залежить від
+    // LIVE_MODE — автоматичний перехід на afterDuplicateStatus все одно
+    // ніколи не станеться в dry-run, гейт на це в processCandidate()).
+    // Дедуплікація — по журналу, щоб той самий кандидат не спамив
+    // сповіщення щопрогону, поки лишається необробленим.
+    // ---------------------------------------------------------------------
+    const feedbackReviewCandidates = stillRelevant.filter((c) => {
+      const cfg = TARGET_STATUSES.find((s) => s.label === c.status);
+      return !!cfg?.afterDuplicateStatus;
+    });
+    if (feedbackReviewCandidates.length) {
+      const alertedAlready = loadFeedbackReviewAlertSet();
+      const freshOnes = feedbackReviewCandidates.filter(
+        (c) => !alertedAlready.has(journalKey(c.orderNumber, c.status, 'feedback-review-alert'))
+      );
+      if (freshOnes.length) {
+        const cfg = TARGET_STATUSES.find((s) => s.label === freshOnes[0].status);
+        const shown = freshOnes.slice(0, MAX_LISTED_IN_NOTIFY);
+        const lines = shown.map((c) => `  #${c.orderNumber} ${c.customerName || '(?)'}`);
+        const extra = freshOnes.length > MAX_LISTED_IN_NOTIFY ? `\n  ...і ще ${freshOnes.length - MAX_LISTED_IN_NOTIFY}` : '';
+        await notify(
+          `🔔⚠️ ЗНАЙДЕНО КАНДИДАТА У СТАТУСІ "${cfg.label.toUpperCase()}" — потребує рев'ю перед --live\n` +
+          lines.join('\n') + extra +
+          `\nАвтоматичний перехід на "${cfg.afterDuplicateStatus}" відбувається ЛИШЕ після LIVE-дублювання повідомлення ` +
+          `(цей прогін — ${LIVE_MODE ? 'LIVE' : 'DRY-RUN'}, тож жодних дій ще не виконано) — перевір changeOrderStatus() у check-order-notifications.js.`
+        );
+        for (const c of freshOnes) {
+          recordResult(journalMap, {
+            orderNumber: c.orderNumber, status: c.status, customerName: c.customerName,
+            botMessageSlot: 'feedback-review-alert', result: FEEDBACK_REVIEW_ALERT_RESULT,
+            note: 'Окреме сповіщення про кандидата надіслано в Telegram',
+          });
+        }
+      }
+    }
 
     if (stillRelevant.length === 0) {
       console.log('Немає кандидатів для перевірки. Завершую.');
