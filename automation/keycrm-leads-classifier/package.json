@@ -9,7 +9,8 @@
     "classify": "node classify-leads.js",
     "export": "node export-readable.js",
     "apply": "node apply-classification.js",
-    "move-to-reminder": "node move-to-reminder.js"
+    "move-to-reminder": "node move-to-reminder.js",
+    "check-order-notifications": "node check-order-notifications.js"
   },
   "keywords": [],
   "author": "",
