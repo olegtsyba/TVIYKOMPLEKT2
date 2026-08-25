@@ -10,7 +10,8 @@
     "export": "node export-readable.js",
     "apply": "node apply-classification.js",
     "move-to-reminder": "node move-to-reminder.js",
-    "check-order-notifications": "node check-order-notifications.js"
+    "check-order-notifications": "node check-order-notifications.js",
+    "check-lead-notifications": "node check-lead-notifications.js"
   },
   "keywords": [],
   "author": "",
