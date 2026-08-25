@@ -400,10 +400,16 @@ async function processCandidate(page, candidate, journalMap, live, sendCounter, 
     const tr = cell ? cell.closest('tr') : null;
     const statusEl = tr ? [...tr.querySelectorAll(sel.statusPill)].find((el) => el.children.length === 0) : null;
     const buyerEl = tr ? tr.querySelector(sel.buyerCell) : null;
+    // buyerEl.textContent саме по собі includes прихований (display:none)
+    // <sup class="el-badge__content">N</sup> — бейдж лічильника замовлень
+    // покупця, а не частину імені (textContent читає й приховані вузли).
+    // Беремо текст лише з посилання-імені, інакше "Ім'я"+"1" ніколи не
+    // збіжиться з чистим client.full_name з API.
+    const buyerNameEl = buyerEl ? buyerEl.querySelector('a[title="Перегляд покупця"]') : null;
     return {
       orderNumber: cell ? cell.textContent.trim() : null,
       status: statusEl ? statusEl.textContent.trim() : null,
-      customerName: buyerEl ? buyerEl.textContent.trim() : null,
+      customerName: buyerNameEl ? buyerNameEl.textContent.trim() : (buyerEl ? buyerEl.textContent.trim() : null),
     };
   }, SELECTORS);
 
