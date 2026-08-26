@@ -242,7 +242,7 @@ function recordResult(journalMap, entry) {
 function formatDuplicatedForNotify(items) {
   if (!items.length) return '';
   const shown = items.slice(0, MAX_LISTED_IN_NOTIFY);
-  const lines = shown.map((i) => `  #${i.orderNumber} ${i.customerName || '(?)'} — ${i.status}`);
+  const lines = shown.map((i) => `  #${i.orderNumber} ${i.customerName || '(?)'} — ${i.status}${i.botMessageSlot ? ` (${i.botMessageSlot})` : ''}`);
   let text = `\n${lines.join('\n')}`;
   if (items.length > MAX_LISTED_IN_NOTIFY) {
     text += `\n  ...і ще ${items.length - MAX_LISTED_IN_NOTIFY}, повний список у ${LOG_PATH}`;
@@ -527,7 +527,7 @@ async function processCandidate(page, candidate, journalMap, live, sendCounter, 
     if (!live) {
       recordResult(journalMap, { ...base, result: 'would-duplicate', note: `dry-run: буде відправлено копію тексту бота: ${botMsg.text.slice(0, 150)}` });
       counts['would-duplicate']++;
-      notifyItems.push({ orderNumber: candidate.orderNumber, customerName: candidate.customerName, status: candidate.status });
+      notifyItems.push({ orderNumber: candidate.orderNumber, customerName: candidate.customerName, status: candidate.status, botMessageSlot: slot });
       continue;
     }
 
@@ -552,7 +552,7 @@ async function processCandidate(page, candidate, journalMap, live, sendCounter, 
       recordResult(journalMap, { ...base, result: verified ? 'duplicated' : 'duplicated-unverified', note: botMsg.text.slice(0, 150) });
       counts[verified ? 'duplicated' : 'duplicated-unverified']++;
       sendCounter.count++;
-      notifyItems.push({ orderNumber: candidate.orderNumber, customerName: candidate.customerName, status: candidate.status });
+      notifyItems.push({ orderNumber: candidate.orderNumber, customerName: candidate.customerName, status: candidate.status, botMessageSlot: slot });
       if (!verified) await saveDebugArtifacts(page, `order-${candidate.orderNumber}-${slot}-unverified-send`);
     } catch (err) {
       recordResult(journalMap, { ...base, result: 'error', note: `send-failed: ${err.message}` });
