@@ -5,6 +5,7 @@ const { chromium } = require('playwright');
 const config = require('./config');
 const { notify } = require('../notify');
 const { ensureFreshSession } = require('../refresh-session');
+const { extractMessages } = require('../extract-messages');
 
 // ---------------------------------------------------------------------------
 // ПРИЗНАЧЕННЯ
@@ -251,30 +252,9 @@ function formatDuplicatedForNotify(items) {
 }
 
 // ---------------------------------------------------------------------------
-// Витяг повідомлень чату. Виконується в контексті сторінки. Клас
-// "vac-message-wrapper" — один запис (vue-advanced-chat). Автора беремо з
-// ".vac-text-username" ("KeyCRM Bot" для бота, реальне ім'я менеджера для
-// ручних повідомлень; системні записи на кшталт "X закрив(-ла) діалог" не
-// мають ні username, ні тексту повідомлення — відсіюються фільтром).
-// Помилку доставки (#10) видає іконка ".el-icon-error" всередині
-// ".vac-message-date" замість звичайного ".el-icon-check" — підтверджено
-// живим прикладом на замовленні #10189 recon'ом 2026-08-24 (скріншот +
-// сирий HTML переглянуто вручну).
-// ---------------------------------------------------------------------------
-function extractMessages() {
-  return [...document.querySelectorAll('.vac-message-wrapper')]
-    .map((el) => {
-      const usernameEl = el.querySelector('.vac-text-username');
-      const sender = usernameEl ? usernameEl.textContent.trim() : null;
-      const textWrapper = el.querySelector('.vac-format-message-wrapper');
-      const text = textWrapper ? textWrapper.textContent.replace(/\s+/g, ' ').trim() : '';
-      const hasError = !!el.querySelector('.vac-message-date .el-icon-error');
-      const dataId = el.getAttribute('data-id');
-      return { dataId, sender, text, hasError };
-    })
-    .filter((m) => m.sender && m.text);
-}
-
+// extractMessages() — спільна з check-lead-notifications.js, винесена в
+// ../extract-messages.js (детальний опис DOM-структури, вибору
+// innerText і recon-підтвердження #10189/#10434 — там).
 // ---------------------------------------------------------------------------
 // Пошук кандидатів: замовлення в кожному з TARGET_STATUSES.
 //

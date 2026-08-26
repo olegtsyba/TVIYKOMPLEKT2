@@ -5,6 +5,7 @@ const { chromium } = require('playwright');
 const config = require('./config');
 const { notify } = require('../notify');
 const { ensureFreshSession } = require('../refresh-session');
+const { extractMessages } = require('../extract-messages');
 
 // ---------------------------------------------------------------------------
 // ПРИЗНАЧЕННЯ
@@ -195,22 +196,8 @@ function summarizeCycle(cycle, c) {
 }
 
 // ---------------------------------------------------------------------------
-// Витяг повідомлень чату — ІДЕНТИЧНО check-order-notifications.js.
-// ---------------------------------------------------------------------------
-function extractMessages() {
-  return [...document.querySelectorAll('.vac-message-wrapper')]
-    .map((el) => {
-      const usernameEl = el.querySelector('.vac-text-username');
-      const sender = usernameEl ? usernameEl.textContent.trim() : null;
-      const textWrapper = el.querySelector('.vac-format-message-wrapper');
-      const text = textWrapper ? textWrapper.textContent.replace(/\s+/g, ' ').trim() : '';
-      const hasError = !!el.querySelector('.vac-message-date .el-icon-error');
-      const dataId = el.getAttribute('data-id');
-      return { dataId, sender, text, hasError };
-    })
-    .filter((m) => m.sender && m.text);
-}
-
+// extractMessages() — спільна з check-order-notifications.js, винесена в
+// ../extract-messages.js.
 // ---------------------------------------------------------------------------
 // Discovery — один запит-джерело (з пагінацією) для ОБОХ циклів разом:
 // і кандидатів на перенос (status_id === sourceStatusId), і кандидатів,
