@@ -29,13 +29,19 @@ async function main() {
   // Якщо бекенд поверне 400 на /auth/login (наприклад, невірні креденшли),
   // одразу піднімаємо зрозумілу помилку замість очікування 60с таймауту навігації.
   page.on('response', async (res) => {
-    if (res.url().includes('/auth/login') && !res.ok()) {
+    if (res.url().includes('/auth/login')) {
+      const headers = res.headers();
+      let bodyText = null;
       try {
-        const body = await res.json();
-        console.error(`Помилка авторизації від сервера: ${body.message || JSON.stringify(body)}`);
+        bodyText = await res.text();
       } catch {
-        console.error(`Помилка авторизації від сервера, статус ${res.status()}`);
+        // тіло вже спожите/недоступне — просто лишаємо null
       }
+      console.error(
+        `[auth/login response] статус ${res.status()} ${res.statusText()} | url: ${res.url()}\n` +
+        `  headers: ${JSON.stringify(headers)}\n` +
+        `  body: ${bodyText}`
+      );
     }
   });
 
@@ -62,27 +68,40 @@ async function main() {
     // (і, наприклад, розблокувати кнопку "Увійти").
     await page.waitForTimeout(500);
 
-    const submitButton = page.getByRole('button', { name: 'Увійти', exact: true });
+    // Текст кнопки залежить від мови інтерфейсу форми логіну ("Увійти" укр.
+    // / "Enter" англ.) — свіжий контекст без storageState інколи рендерить
+    // цю сторінку англійською (виявлено 2026-08-25: сторінка логіну
+    // англійською навіть без жодного логіну, тобто локаль визначається ДО
+    // автентифікації, не з налаштувань акаунта). Тому шукаємо ОБидва варіанти.
+    const submitButton = page.getByRole('button', { name: /^(Увійти|Enter)$/, exact: true });
     await submitButton.waitFor({ state: 'visible', timeout: 10000 });
 
     // Чекаємо, поки кнопка стане активною (не disabled), максимум 10с.
     await page.waitForFunction(
-      (btnText) => {
+      () => {
         const btns = [...document.querySelectorAll('button')];
-        const btn = btns.find((b) => b.textContent.trim() === btnText);
+        const btn = btns.find((b) => ['Увійти', 'Enter'].includes(b.textContent.trim()));
         return btn && !btn.disabled && btn.getAttribute('aria-disabled') !== 'true';
       },
-      'Увійти',
       { timeout: 10000 }
     ).catch(() => {
-      console.warn('Попередження: не вдалось підтвердити, що кнопка "Увійти" активна — пробую клікнути все одно.');
+      console.warn('Попередження: не вдалось підтвердити, що кнопка логіну активна — пробую клікнути все одно.');
     });
 
     console.log('Надсилаю форму логіну...');
     await submitButton.click();
 
-    console.log('Очікую перехід у застосунок (/app/...)...');
-    await page.waitForURL(/\/app\//, { timeout: 60000 });
+    // Виявлено 2026-08-25: очікування URL з "/app/" ненадійне — ця SPA,
+    // схоже, робить client-side роутинг, який не завжди тригерить подію
+    // навігації, яку відстежує waitForURL (POST /auth/login повертав 200
+    // з токенами, скріншот показував уже автентифікований дашборд
+    // "Привіт, {ім'я}!", а waitForURL все одно падав по таймауту й
+    // scriptнавіть не доходив до збереження storageState). Тому чекаємо
+    // прямої ознаки успішного логіну — authToken у localStorage (той
+    // самий ключ, яким користується fetchAuthToken() в
+    // check-order-notifications.js) — а не URL.
+    console.log('Очікую появу authToken у localStorage (ознака успішного логіну)...');
+    await page.waitForFunction(() => !!localStorage.getItem('authToken'), { timeout: 60000 });
 
     // Даємо застосунку час дорендерити основний layout перед збереженням сесії.
     await page.waitForTimeout(2000);
