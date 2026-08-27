@@ -123,6 +123,23 @@ const TERMINAL_RESULTS = new Set([
 // самого сповіщення, читається окремо через loadFeedbackReviewAlertSet().
 const FEEDBACK_REVIEW_ALERT_RESULT = 'feedback-review-alert-sent';
 
+// ---------------------------------------------------------------------------
+// Постійний виняток (skip-list) — номери замовлень, які discovery має
+// відкидати ще до відкриття картки. Причина: у клієнта немає існуючого
+// діалогу в Instagram Direct (замовлення оформлене іншим каналом), тож бот
+// KeyCRM ніколи не слав туди автоповідомлення і дублювати нема чого — але
+// кожен прогін марно відкривав картку, не знаходив conversation-лінк і
+// писав у журнал 'no-conversation-link'. Цей результат НЕ термінальний
+// (навмисно — звичайні помилки треба повторювати), тому такий кандидат
+// сам по собі ніколи не "затихав" і засмічував кожен прогін тією самою
+// помилкою. Значення Map — людиночитабельна причина для аудиту.
+// Якщо в такого замовлення колись з'явиться діалог у Direct — прибрати
+// його звідси вручну.
+const PERMANENT_SKIP_ORDERS = new Map([
+  ['10481', 'no-conversation-link — немає діалогу в Instagram Direct (щопрогону 26-27.08.2026)'],
+  ['10657', 'no-conversation-link — немає діалогу в Instagram Direct (щопрогону 26-27.08.2026)'],
+]);
+
 const SELECTORS = {
   quickSearchInput: 'input[placeholder="Швидкий пошук"]',
   orderRowExpandIcon: '.la-angle-right',
@@ -598,8 +615,17 @@ async function main() {
 
   try {
     console.log('Шукаю замовлення в цільових статусах воронки "Доставка"...');
-    const candidates = await discoverCandidates(page);
+    let candidates = await discoverCandidates(page);
     console.log(`Знайдено кандидатів (замовлення×статус): ${candidates.length}`);
+
+    const skippedByList = [...new Set(
+      candidates.filter((c) => PERMANENT_SKIP_ORDERS.has(c.orderNumber)).map((c) => c.orderNumber)
+    )];
+    if (skippedByList.length) {
+      console.log(`Постійний виняток (skip-list) — не обробляю ${skippedByList.map((n) => `#${n}`).join(', ')}:`);
+      for (const n of skippedByList) console.log(`  #${n} — ${PERMANENT_SKIP_ORDERS.get(n)}`);
+      candidates = candidates.filter((c) => !PERMANENT_SKIP_ORDERS.has(c.orderNumber));
+    }
 
     const stillRelevant = candidates.filter((c) => {
       const cfg = TARGET_STATUSES.find((s) => s.label === c.status);
