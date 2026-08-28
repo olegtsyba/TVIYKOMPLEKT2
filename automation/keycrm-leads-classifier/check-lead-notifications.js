@@ -114,6 +114,18 @@ async function randomProtectiveDelay(page) {
   await page.waitForTimeout(ms);
 }
 
+// Вікно реальних відправок клієнту — 9:00-23:00 за Києвом. Перевіряється
+// заново перед КОЖНОЮ дією, що спричиняє повідомлення клієнту (і явний
+// дубль-send, і перенос статусу, який сам тригерить автоповідомлення
+// KeyCRM Bot) — не один раз на старті прогону, бо сам прогін триває
+// десятки хвилин через randomProtectiveDelay.
+function isOutsideSendWindow() {
+  const hour = Number(
+    new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Kyiv', hour: 'numeric', hourCycle: 'h23' }).format(new Date())
+  );
+  return hour < 9 || hour >= 23;
+}
+
 function stripChatPrefix(text) {
   return text ? text.replace(/^\s*Чат\s*з\s*/i, '').trim() : null;
 }
@@ -181,7 +193,7 @@ function formatItemsForNotify(items) {
 }
 
 function emptyCounts() {
-  return { moved: 0, 'would-move': 0, delivered: 0, 'already-duplicated-manually': 0, duplicated: 0, 'duplicated-unverified': 0, 'would-duplicate': 0, error: 0 };
+  return { moved: 0, 'would-move': 0, delivered: 0, 'already-duplicated-manually': 0, duplicated: 0, 'duplicated-unverified': 0, 'would-duplicate': 0, error: 0, 'skipped-after-hours': 0 };
 }
 
 function summarizeCycle(cycle, c) {
@@ -191,7 +203,8 @@ function summarizeCycle(cycle, c) {
     `Цикл ${cycle.key} ("${cycle.sourceLabel}" → "${cycle.targetLabel}"): ` +
     `перенесено ${movedTotal} | доставлено без помилок ${c.delivered} | ` +
     `вже продубльовано вручну ${c['already-duplicated-manually']} | продубльовано ${duplicatedTotal}` +
-    `${c.error ? ` | помилок ${c.error}` : ''}`
+    `${c.error ? ` | помилок ${c.error}` : ''}` +
+    `${c['skipped-after-hours'] ? ` | пропущено (після 23:00) ${c['skipped-after-hours']}` : ''}`
   );
 }
 
@@ -495,6 +508,13 @@ async function processChatCheck(page, task, cycle, verify, journalMap, live, sen
     return 'RATE_LIMIT_HIT';
   }
 
+  if (isOutsideSendWindow()) {
+    recordResult(journalMap, { ...base, customerName, result: 'skipped-after-hours', note: `дублювання пропущено — час поза вікном 9:00-23:00, спробуємо в ранковому прогоні: ${botMsg.text.slice(0, 150)}` });
+    counts['skipped-after-hours']++;
+    notifyItems.push({ leadId: task.leadId, customerName, cycleKey: task.cycleKey, action: 'skipped-after-hours' });
+    return null;
+  }
+
   try {
     const input = page.getByPlaceholder(SELECTORS.chatInputPlaceholder);
     await input.click();
@@ -556,6 +576,18 @@ async function processTask(page, task, journalMap, live, sendCounter, maxSends, 
     });
     counts['would-move']++;
     notifyItems.push({ leadId: task.leadId, customerName: task.customerName, cycleKey: task.cycleKey, action: 'would-move' });
+    return null;
+  }
+
+  if (isOutsideSendWindow()) {
+    // Перенос статусу сам тригерить автоповідомлення KeyCRM Bot клієнту —
+    // тому це так само "відправка", як і явний дубль-send нижче. Лід
+    // лишається в колонці-тригері (статус не міняли) — наступний ранковий
+    // прогін (9:00) підхопить його як звичайного нового кандидата, без
+    // окремої логіки відновлення.
+    recordResult(journalMap, { ...base, customerName: task.customerName, result: 'skipped-after-hours', note: 'перенос картки (і повідомлення клієнту, яке він тригерить) пропущено — час поза вікном 9:00-23:00, картку лишено в колонці-тригері' });
+    counts['skipped-after-hours']++;
+    notifyItems.push({ leadId: task.leadId, customerName: task.customerName, cycleKey: task.cycleKey, action: 'skipped-after-hours' });
     return null;
   }
 

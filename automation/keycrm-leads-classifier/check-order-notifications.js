@@ -181,6 +181,18 @@ async function randomProtectiveDelay(page) {
   await page.waitForTimeout(ms);
 }
 
+// Вікно реальних відправок клієнту — 9:00-23:00 за Києвом. Перевіряється
+// заново перед КОЖНОЮ дією, що спричиняє повідомлення клієнту (і явний
+// дубль-send, і зміна статусу замовлення на "Скасовано", яка сама
+// тригерить автоповідомлення KeyCRM Bot) — не один раз на старті прогону,
+// бо сам прогін триває десятки хвилин через randomProtectiveDelay.
+function isOutsideSendWindow() {
+  const hour = Number(
+    new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Kyiv', hour: 'numeric', hourCycle: 'h23' }).format(new Date())
+  );
+  return hour < 9 || hour >= 23;
+}
+
 function ensureDirs() {
   fs.mkdirSync(config.OUTPUT_DIR, { recursive: true });
   fs.mkdirSync(config.DEBUG_DIR, { recursive: true });
@@ -534,6 +546,13 @@ async function processCandidate(page, candidate, journalMap, live, sendCounter, 
       break;
     }
 
+    if (isOutsideSendWindow()) {
+      recordResult(journalMap, { ...base, result: 'skipped-after-hours', note: `дублювання пропущено — час поза вікном 9:00-23:00, спробуємо в ранковому прогоні: ${botMsg.text.slice(0, 150)}` });
+      counts['skipped-after-hours']++;
+      notifyItems.push({ orderNumber: candidate.orderNumber, customerName: candidate.customerName, status: candidate.status, botMessageSlot: slot });
+      continue;
+    }
+
     try {
       const input = page.getByPlaceholder(SELECTORS.chatInputPlaceholder);
       await input.click();
@@ -570,14 +589,29 @@ async function processCandidate(page, candidate, journalMap, live, sendCounter, 
     );
     const cancelKey = journalKey(candidate.orderNumber, candidate.status, 'cancel');
     if (anyDuplicatedByUs && !journalMap.has(cancelKey)) {
-      const cancelResult = await changeOrderStatus(page, candidate.orderNumber, cfg.afterDuplicateStatus);
-      recordResult(journalMap, {
-        orderNumber: candidate.orderNumber, status: candidate.status, customerName: candidate.customerName,
-        botMessageSlot: 'cancel', mode: 'live',
-        result: cancelResult.ok ? 'cancelled-after-duplicate' : 'error',
-        note: cancelResult.note,
-      });
-      if (!cancelResult.ok) counts.error++;
+      if (isOutsideSendWindow()) {
+        // Перехід на "Скасовано" сам тригерить автоповідомлення KeyCRM Bot
+        // клієнту — тому це так само "відправка", як і явний дубль-send
+        // вище. Статус лишається "Фідбек відмова" — наступний ранковий
+        // прогін (9:00) повторить спробу (cancelKey досі відсутній у
+        // журналі, бо результат нетермінальний).
+        recordResult(journalMap, {
+          orderNumber: candidate.orderNumber, status: candidate.status, customerName: candidate.customerName,
+          botMessageSlot: 'cancel', mode: 'live',
+          result: 'skipped-after-hours',
+          note: 'перехід на "Скасовано" (і повідомлення клієнту, яке він тригерить) пропущено — час поза вікном 9:00-23:00, спробуємо в ранковому прогоні',
+        });
+        counts['skipped-after-hours']++;
+      } else {
+        const cancelResult = await changeOrderStatus(page, candidate.orderNumber, cfg.afterDuplicateStatus);
+        recordResult(journalMap, {
+          orderNumber: candidate.orderNumber, status: candidate.status, customerName: candidate.customerName,
+          botMessageSlot: 'cancel', mode: 'live',
+          result: cancelResult.ok ? 'cancelled-after-duplicate' : 'error',
+          note: cancelResult.note,
+        });
+        if (!cancelResult.ok) counts.error++;
+      }
     }
   }
 
@@ -607,7 +641,7 @@ async function main() {
   const page = await context.newPage();
 
   const notifyItems = [];
-  const counts = { delivered: 0, 'already-duplicated-manually': 0, duplicated: 0, 'duplicated-unverified': 0, 'would-duplicate': 0, error: 0, 'status-changed': 0 };
+  const counts = { delivered: 0, 'already-duplicated-manually': 0, duplicated: 0, 'duplicated-unverified': 0, 'would-duplicate': 0, error: 0, 'status-changed': 0, 'skipped-after-hours': 0 };
   const sendCounter = { count: 0 };
   // Випадковий ліміт 15-20 (не фіксований) — той самий дух захисту від
   // тригерів Meta, що й у випадкових затримках і перемішаній черзі.
@@ -733,6 +767,7 @@ async function main() {
     console.log(`Вже продубльовано вручну: ${counts['already-duplicated-manually']}`);
     console.log(`${LIVE_MODE ? 'Продубльовано' : 'Буде продубльовано (dry-run)'}: ${LIVE_MODE ? counts.duplicated + counts['duplicated-unverified'] : counts['would-duplicate']}`);
     console.log(`Змінили статус до обробки (пропущено): ${counts['status-changed']}`);
+    console.log(`Пропущено (після 23:00): ${counts['skipped-after-hours']}`);
     console.log(`Помилок: ${counts.error}`);
     console.log(`Повний лог: ${LOG_PATH}`);
 
@@ -746,6 +781,7 @@ async function main() {
       `${LIVE_MODE ? 'Продубльовано автоматично' : 'Буде продубльовано (dry-run)'}: ${duplicatedTotal}` +
       formatDuplicatedForNotify(notifyItems) +
       `${counts['status-changed'] ? `\nЗамовлення змінили статус до обробки: ${counts['status-changed']}` : ''}` +
+      `${counts['skipped-after-hours'] ? `\nПропущено (після 23:00, повторимо вранці): ${counts['skipped-after-hours']}` : ''}` +
       `${counts.error ? `\nПомилок: ${counts.error} — перевір лог ${LOG_PATH}` : ''}`
     );
   } catch (err) {
