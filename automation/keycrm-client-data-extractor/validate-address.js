@@ -59,28 +59,76 @@ async function apiGet(authToken, urlPath) {
   return res.json();
 }
 
-// Клієнт міг написати "м. Київ", "місто Київ" тощо — MainDescription
-// у відповіді API цих префіксів не містить, тож знімаємо їх перед звіркою.
-function normalizeCityText(raw) {
-  return raw
-    .trim()
-    .replace(/^(м\.|місто|смт\.?|село|с\.)\s*/i, '')
-    .trim()
-    .toLowerCase();
+// Клієнт міг написати "м. Київ", "місто Київ", "смт.Заводське" тощо —
+// MainDescription у відповіді API цих префіксів не містить. Прибираємо
+// префікс і перед самим API-запитом (фуззі-пошук NP не завжди знаходить
+// збіги, коли префікс приклеєний до назви без пробілу, напр.
+// "смт.Заводське" дає 0 кандидатів, тоді як чисте "Заводське" — 6), і
+// перед звіркою з MainDescription.
+function stripSettlementTypePrefix(raw) {
+  return raw.trim().replace(/^(м\.|місто|смт\.?|село|с\.)\s*/i, '').trim();
 }
 
-// Клієнт міг дописати уточнення області через кому ("Дрогобич, Львівська
-// область") або без коми ("Дрогобич Львівська обл."). MainDescription у
-// відповіді API містить ЛИШЕ назву населеного пункту — область там окремим
-// полем (Area), тому пошук і звірка по повному рядку з областю ніколи не
-// дають точного збігу, навіть якщо потрібне місто є серед fuzzy-кандидатів
-// API. Відрізаємо уточнення області перед пошуком/звіркою, а повний
-// оригінальний текст лишаємо в результаті окремо — для відображення в звіті.
-function stripRegionSuffix(raw) {
-  return raw
-    .split(',')[0]
-    .replace(/\s+(область|обл\.?)\s*$/i, '')
-    .trim();
+function normalizeCityText(raw) {
+  return stripSettlementTypePrefix(raw).toLowerCase();
+}
+
+// Клієнт міг дописати уточнення області через кому в кінці ("Дрогобич,
+// Львівська область"), без коми в кінці ("Дрогобич Львівська обл.") або
+// в дужках НА ПОЧАТКУ ("(Тернопільська обл.) смт.Заводське" — типовий
+// спосіб уточнити регіон для дрібних НП, чия назва сама по собі
+// неоднозначна). MainDescription у відповіді API містить ЛИШЕ назву
+// населеного пункту — область там окремим полем (Area), тому пошук і
+// звірка по повному рядку з областю ніколи не дають точного збігу.
+// Відрізаємо уточнення області перед пошуком/звіркою, а розпізнану назву
+// області НЕ викидаємо — вона стає додатковим сигналом тай-брейкера
+// (filterByRegionHint), коли сама назва населеного пункту неоднозначна
+// (кілька однойменних населених пунктів в різних областях).
+function extractCityAndRegion(raw) {
+  const trimmed = raw.trim();
+
+  const leadingParen = trimmed.match(/^\(\s*([^)]*?)\s*\)\s*(.+)$/s);
+  if (leadingParen) {
+    const [, parenContent, rest] = leadingParen;
+    const regionMatch = parenContent.match(/^(.+?)\s*(?:область|обл\.?)$/i);
+    if (regionMatch) {
+      return { citySearchText: rest.trim(), regionHint: regionMatch[1].trim() };
+    }
+  }
+
+  const commaParts = trimmed.split(',');
+  if (commaParts.length > 1) {
+    const tail = commaParts.slice(1).join(',').trim();
+    const regionMatch = tail.match(/^(.+?)\s*(?:область|обл\.?)$/i);
+    return {
+      citySearchText: commaParts[0].trim(),
+      regionHint: regionMatch ? regionMatch[1].trim() : null,
+    };
+  }
+
+  // Без коми і без провідних дужок: лише прибираємо трейлінгове "обл."/
+  // "область", область як сигнал тай-брейкера тут не розпізнаємо (щоб не
+  // чіпати поведінку для цього рідкісного варіанту без надійного парсингу).
+  return {
+    citySearchText: trimmed.replace(/\s+(область|обл\.?)\s*$/i, '').trim(),
+    regionHint: null,
+  };
+}
+
+// Якщо назва населеного пункту сама по собі неоднозначна (кілька
+// однойменних в різних областях) і клієнт вказав область — звужуємо
+// кандидатів звіркою з полем Area. Якщо жоден кандидат не збігся
+// (наприклад, клієнт помилився чи назвав область нестандартно) —
+// повертаємо candidates без змін, а не порожній список, щоб не
+// втратити реальних кандидатів через хибний сигнал.
+function filterByRegionHint(candidates, regionHint) {
+  if (!regionHint) return candidates;
+  const normalizedHint = regionHint.trim().toLowerCase();
+  const filtered = candidates.filter((c) => {
+    const area = (c.Area || '').trim().toLowerCase();
+    return area === normalizedHint || area.startsWith(normalizedHint) || normalizedHint.startsWith(area);
+  });
+  return filtered.length > 0 ? filtered : candidates;
 }
 
 function toCandidateInfo(c) {
@@ -144,13 +192,14 @@ async function tryResolveByWarehouseNumber(authToken, exactMatches, warehouseNum
 }
 
 async function validateCity(authToken, cityText, warehouseNumber, debugLabel) {
-  const citySearchText = stripRegionSuffix(cityText);
+  const { citySearchText, regionHint } = extractCityAndRegion(cityText);
   const wasCleaned = citySearchText.toLowerCase() !== cityText.trim().toLowerCase();
   const cleanedNote = wasCleaned
     ? `Пошук виконано за очищеною назвою "${citySearchText}" (оригінал з переписки: "${cityText}").`
     : null;
 
-  const candidates = await apiGet(authToken, `/delivery/novaposhta/location?query=${encodeURIComponent(citySearchText)}`);
+  const queryText = stripSettlementTypePrefix(citySearchText);
+  const candidates = await apiGet(authToken, `/delivery/novaposhta/location?query=${encodeURIComponent(queryText)}`);
   fs.writeFileSync(
     path.join(config.DEBUG_DIR, `${debugLabel}-location.json`),
     JSON.stringify(candidates, null, 2),
@@ -174,28 +223,64 @@ async function validateCity(authToken, cityText, warehouseNumber, debugLabel) {
   }
 
   if (exactMatches.length > 1) {
+    // Спершу пробуємо звузити за областю, яку назвав клієнт (якщо
+    // назвав) — якщо це дає рівно одного кандидата, номер відділення
+    // лише підтверджує його (не є єдиним джерелом істини). Якщо ні —
+    // працюємо далі з exactMatches як і раніше (без регресії для
+    // кейсів без regionHint чи з хибним/нестандартним уточненням
+    // області — filterByRegionHint тоді повертає candidates без змін).
+    const regionFiltered = filterByRegionHint(exactMatches, regionHint);
+    const regionNarrowed = Boolean(regionHint) && regionFiltered.length < exactMatches.length;
+    const candidatePool = regionNarrowed ? regionFiltered : exactMatches;
+
+    if (candidatePool.length === 1) {
+      const candidate = candidatePool[0];
+      let resolvedWarehouseMatch = null;
+      if (warehouseNumber) {
+        const { exactMatches: whMatches } = await fetchWarehouseByNumber(authToken, candidate.Ref, warehouseNumber);
+        if (whMatches.length > 0) resolvedWarehouseMatch = whMatches[0];
+      }
+      return {
+        status: 'ok',
+        ref: candidate.Ref,
+        matches: [toCandidateInfo(candidate)],
+        originalCityText: cityText,
+        citySearchText,
+        note: withCleanedNote(`Кілька населених пунктів з назвою "${citySearchText}", але вибір підтверджено за областю "${regionHint}", яку вказав клієнт, — вона є лише в одного кандидата.`),
+        ...(resolvedWarehouseMatch ? { resolvedWarehouseMatch } : {}),
+      };
+    }
+
     if (warehouseNumber) {
-      const hits = await tryResolveByWarehouseNumber(authToken, exactMatches, warehouseNumber, debugLabel);
+      const hits = await tryResolveByWarehouseNumber(authToken, candidatePool, warehouseNumber, debugLabel);
       if (hits.length === 1) {
         const { candidate, warehouseMatch } = hits[0];
+        const note = regionNarrowed
+          ? `Кілька населених пунктів з назвою "${citySearchText}"; спершу звужено за областю "${regionHint}", яку вказав клієнт, а тоді підтверджено перевіркою номера відділення №${warehouseNumber} — він існує лише в одного кандидата.`
+          : `Кілька населених пунктів з назвою "${citySearchText}", але вибір підтверджено перевіркою номера відділення №${warehouseNumber} — він існує лише в одного кандидата.`;
         return {
           status: 'ok',
           ref: candidate.Ref,
           matches: [toCandidateInfo(candidate)],
           originalCityText: cityText,
           citySearchText,
-          note: withCleanedNote(`Кілька населених пунктів з назвою "${citySearchText}", але вибір підтверджено перевіркою номера відділення №${warehouseNumber} — він існує лише в одного кандидата.`),
+          note: withCleanedNote(note),
           resolvedWarehouseMatch: warehouseMatch,
         };
       }
     }
+
     return {
       status: 'неоднозначно',
       ref: null,
-      matches: exactMatches.map(toCandidateInfo),
+      matches: candidatePool.map(toCandidateInfo),
       originalCityText: cityText,
       citySearchText,
-      note: withCleanedNote(`Кілька населених пунктів з назвою "${citySearchText}" — потрібен вибір вручну.`),
+      note: withCleanedNote(
+        regionNarrowed
+          ? `Кілька населених пунктів з назвою "${citySearchText}" навіть після звуження за областю "${regionHint}" — потрібен вибір вручну.`
+          : `Кілька населених пунктів з назвою "${citySearchText}" — потрібен вибір вручну.`
+      ),
     };
   }
 
