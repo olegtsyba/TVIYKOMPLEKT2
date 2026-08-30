@@ -8,7 +8,8 @@
     "collect": "node collect-orders.js",
     "extract": "node extract-client-data.js",
     "validate": "node validate-address.js",
-    "export": "node export-readable.js"
+    "export": "node export-readable.js",
+    "fill": "node fill-client-data.js"
   },
   "keywords": [],
   "author": "",

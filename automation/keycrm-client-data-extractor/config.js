@@ -10,6 +10,7 @@ module.exports = {
   OUTPUT_PATH: path.join(__dirname, 'output', 'orders_dialogs.json'),
   EXTRACTION_OUTPUT_PATH: path.join(__dirname, 'output', 'extraction_results.json'),
   VALIDATION_OUTPUT_PATH: path.join(__dirname, 'output', 'validation_results.json'),
+  FILL_LOG_PATH: path.join(__dirname, 'output', 'fill-client-data-log.jsonl'),
   DEBUG_DIR: path.join(__dirname, 'output', 'debug'),
   ORDER_FORMED_COLUMN_TITLE: 'Замовлення сформовано',
   CARDS_TO_COLLECT: 10,
