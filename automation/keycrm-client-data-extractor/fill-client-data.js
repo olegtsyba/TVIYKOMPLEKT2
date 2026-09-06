@@ -32,6 +32,12 @@ const { notify } = require('../notify');
 //     решта йде в лог/Telegram списком для ручного розгляду Крістіни/менеджера;
 //   * --limit=N + жорстка стеля MAX_CARDS; партії з паузою-контрольною точкою;
 //   * Telegram-сповіщення на старті LIVE-прогону і підсумкове наприкінці.
+//   * MERGE-режим (з 06.09.2026): якщо контактне поле в CRM УЖЕ заповнене
+//     значенням, відмінним від extraction — картка НЕ зупиняється. Таке поле
+//     логуються як manual-review і лишається людині на звірку, а решта
+//     ПОРОЖНІХ полів (телефон/email) + "Зберегти покупця" + адреса доставки
+//     все одно виконуються. Аборт лишається ТІЛЬКИ на справжньому збої запису
+//     в порожнє поле (телефон — критично, мовчазна відмова KeyCRM).
 //
 // Послідовність на одну картку (кроки з ТЗ):
 //   1  відкрити картку ліда в колонці "Замовлення сформовано"
@@ -663,15 +669,25 @@ async function saveAddress(page, base, drawer, clientId, expectWhRef, live) {
 async function processCard(page, column, item, live, authToken) {
   const base = { cardIndex: item.cardIndex, customerName: item.customerName, mode: live ? 'live' : 'dry-run' };
 
+  // Контактні поля, які скрипт свідомо НЕ чіпав, бо в CRM уже було інше
+  // значення (merge-режим). Картка через них не зупиняється, але людина має
+  // звірити їх вручну — потрапляють у підсумок і Telegram.
+  const manualReviewFields = [];
+  const result = (outcome, extra = {}) => ({
+    outcome,
+    ...extra,
+    ...(manualReviewFields.length ? { manualReviewFields: [...manualReviewFields] } : {}),
+  });
+
   // A. Знайти картку в колонці "Замовлення сформовано".
   const loc = await locateCardByName(page, column, item.customerName);
   if (loc.status === 'not-found') {
     step(base, 'locate-card', 'skipped', `картки "${item.customerName}" немає в колонці "${config.ORDER_FORMED_COLUMN_TITLE}" (ймовірно вже оброблено / переміщено)`, {});
-    return { outcome: 'skipped' };
+    return result('skipped');
   }
   if (loc.status === 'ambiguous') {
     step(base, 'locate-card', 'skipped', `кілька карток з імʼям "${item.customerName}" — позиційно розрізнити небезпечно, ручний розгляд`, { hits: loc.hits });
-    return { outcome: 'skipped', notifyLine: `#${item.cardIndex} ${item.customerName}: неоднозначне імʼя в колонці` };
+    return result('skipped', { notifyLine: `#${item.cardIndex} ${item.customerName}: неоднозначне імʼя в колонці` });
   }
   const leadId = loc.leadId;
   base.leadId = leadId;
@@ -682,7 +698,7 @@ async function processCard(page, column, item, live, authToken) {
   if (leadRes.status === 401) throw new Error('API 401 — сесія протухла під час прогону');
   if (leadRes.status !== 200 || !leadRes.json) {
     step(base, 'read-state', 'error', `GET /leads/${leadId} -> ${leadRes.status}`, {});
-    return { outcome: 'error' };
+    return result('error');
   }
   const contact = leadRes.json.contact || {};
   let clientId = contact.client_id || null;
@@ -699,29 +715,42 @@ async function processCard(page, column, item, live, authToken) {
     if (normName(modalName) !== normName(item.customerName)) {
       step(base, 'open-lead-card', 'error', `відкрилась не та картка: "${modalName}"`, {});
       await closeLeadCard(page).catch(() => {});
-      return { outcome: 'error' };
+      return result('error');
     }
     step(base, 'open-lead-card', 'ok', `картку відкрито, title="${modalName}"`, {});
 
     // D. Кроки 2–5 — лише якщо покупця ще не привʼязано.
     if (!clientId) {
+      // ПІБ. Порожнє -> заповнюємо. Уже заповнене ІНШИМ значенням -> merge:
+      // не чіпаємо, лишаємо людині на звірку, картку НЕ зупиняємо.
+      // Справжній збій запису в порожнє поле (ok===false без manualReview) -> аборт.
       const fn = await fillContactField(page, base, modal, 'full_name', item.fullName, leadId, live, contact.full_name);
-      if (fn.manualReview || fn.ok === false) {
+      if (fn.manualReview) {
+        manualReviewFields.push('ПІБ');
+      } else if (fn.ok === false) {
         await closeLeadCard(page).catch(() => {});
-        return { outcome: fn.manualReview ? 'skipped' : 'failed', notifyLine: `#${item.cardIndex} ${item.customerName}: ПІБ — ${fn.manualReview ? 'ручний розгляд' : 'не збережено'}` };
+        return result('failed', { notifyLine: `#${item.cardIndex} ${item.customerName}: ПІБ — не збережено` });
       }
 
+      // Телефон. Порожнє -> заповнюємо; справжній збій запису (мовчазна відмова
+      // KeyCRM) -> КРИТИЧНО, аборт. Уже заповнений іншим номером -> merge:
+      // лишаємо людині на звірку, картку продовжуємо (клієнт усе одно має телефон).
       const ph = await fillContactField(page, base, modal, 'phone', item.phone, leadId, live, contact.phone);
-      if (ph.manualReview || ph.ok === false) {
+      if (ph.manualReview) {
+        manualReviewFields.push('телефон');
+      } else if (ph.ok === false) {
         step(base, 'abort-card', 'failed', 'КРИТИЧНО: телефон не збережено/не підтверджено — картку зупинено до створення покупця', {});
         await closeLeadCard(page).catch(() => {});
         await saveShot(page, `card${item.cardIndex}-phone-fail`);
-        return { outcome: ph.manualReview ? 'skipped' : 'failed', notifyLine: `#${item.cardIndex} ${item.customerName}: телефон не пройшов` };
+        return result('failed', { notifyLine: `#${item.cardIndex} ${item.customerName}: телефон не пройшов` });
       }
 
       if (item.email) {
         const em = await fillContactField(page, base, modal, 'email', item.email, leadId, live, contact.email);
-        if (em.ok === false && !em.manualReview) {
+        if (em.manualReview) {
+          manualReviewFields.push('email');
+          step(base, 'email-warning', 'ok', 'email у CRM має інше значення — лишаю на ручну звірку, продовжую', { inCrm: contact.email, expected: item.email });
+        } else if (em.ok === false) {
           step(base, 'email-warning', 'ok', 'email не збережено — не блокуюче, продовжую', { sent: item.email });
         }
       } else {
@@ -732,7 +761,10 @@ async function processCard(page, column, item, live, authToken) {
       if (!sp.ok) {
         await closeLeadCard(page).catch(() => {});
         await saveShot(page, `card${item.cardIndex}-save-purchaser-fail`);
-        return { outcome: 'failed', notifyLine: `#${item.cardIndex} ${item.customerName}: не вдалось "Зберегти покупця"` };
+        return result('failed', {
+          notifyLine: `#${item.cardIndex} ${item.customerName}: не вдалось "Зберегти покупця"`
+            + (manualReviewFields.length ? ` (поле лишилось попередньо заповненим: ${manualReviewFields.join(', ')} — можливо, кнопка не активувалась; треба recon редагування наявного значення)` : ''),
+        });
       }
       clientId = sp.clientId;
     } else {
@@ -746,13 +778,13 @@ async function processCard(page, column, item, live, authToken) {
     step(base, 'lead-card-phase', 'error', `виняток: ${err.message}`, {});
     await saveShot(page, `card${item.cardIndex}-leadphase-error`);
     await closeLeadCard(page).catch(() => {});
-    return { outcome: 'error' };
+    return result('error');
   }
 
   // --- Адресна фаза ---
   if (!clientId) {
     step(base, 'address-phase', 'skipped', 'dry-run без наявного clientId — адресну частину неможливо перевірити без реального покупця; буде виконана в --live', {});
-    return { outcome: 'dry-partial' };
+    return result('dry-partial');
   }
   base.clientId = clientId;
 
@@ -762,7 +794,7 @@ async function processCard(page, column, item, live, authToken) {
     const exists = addrRes.json.some((a) => a && a.payload && a.payload.warehouse_ref === item.warehouseRef);
     if (exists) {
       step(base, 'address-exists', 'skipped', 'у покупця вже є адреса з цим відділенням — пропускаю', { warehouseRef: item.warehouseRef });
-      return { outcome: 'ok' };
+      return result('ok');
     }
   }
 
@@ -782,23 +814,23 @@ async function processCard(page, column, item, live, authToken) {
     if (!switched) {
       step(base, 'switch-mode', 'failed', 'поля Місто/Склад не змонтувались після перемикання режиму', {});
       await saveShot(page, `card${item.cardIndex}-switch-mode-fail`);
-      return { outcome: 'failed', notifyLine: `#${item.cardIndex} ${item.customerName}: не змонтувались поля складу` };
+      return result('failed', { notifyLine: `#${item.cardIndex} ${item.customerName}: не змонтувались поля складу` });
     }
     step(base, 'switch-mode', 'ok', 'режим "Склад", поля Місто/Склад доступні', {});
 
     // J. Місто.
     const city = await fillCity(page, base, item, live);
-    if (!city.ok) { await saveShot(page, `card${item.cardIndex}-city-fail`); return { outcome: 'failed', notifyLine: `#${item.cardIndex} ${item.customerName}: місто` }; }
+    if (!city.ok) { await saveShot(page, `card${item.cardIndex}-city-fail`); return result('failed', { notifyLine: `#${item.cardIndex} ${item.customerName}: місто` }); }
 
     // K. Склад.
     const wh = await fillWarehouse(page, base, item, live);
-    if (!wh.ok) { await saveShot(page, `card${item.cardIndex}-warehouse-fail`); return { outcome: 'failed', notifyLine: `#${item.cardIndex} ${item.customerName}: відділення` }; }
+    if (!wh.ok) { await saveShot(page, `card${item.cardIndex}-warehouse-fail`); return result('failed', { notifyLine: `#${item.cardIndex} ${item.customerName}: відділення` }); }
 
     // L. Зберегти адресу.
     const saved = await saveAddress(page, base, drawer, clientId, item.warehouseRef, live);
     if (!saved.ok && live) {
       await saveShot(page, `card${item.cardIndex}-save-address-fail`);
-      return { outcome: 'failed', notifyLine: `#${item.cardIndex} ${item.customerName}: збереження адреси` };
+      return result('failed', { notifyLine: `#${item.cardIndex} ${item.customerName}: збереження адреси` });
     }
 
     // M. Перевірка через GET (лише LIVE).
@@ -809,15 +841,18 @@ async function processCard(page, column, item, live, authToken) {
       step(base, 'verify-address', present ? 'ok' : 'failed',
         present ? 'GET підтвердив: адреса з потрібним відділенням зʼявилась у покупця' : 'GET НЕ бачить нову адресу — перевір вручну',
         { warehouseRef: item.warehouseRef });
-      if (!present) return { outcome: 'failed', notifyLine: `#${item.cardIndex} ${item.customerName}: адреса не підтвердилась GET` };
+      if (!present) return result('failed', { notifyLine: `#${item.cardIndex} ${item.customerName}: адреса не підтвердилась GET` });
     }
 
-    step(base, 'card-done', 'ok', live ? 'картку опрацьовано повністю' : 'dry-run: усі кроки пройшли перевірку', { clientId, warehouseRef: item.warehouseRef });
-    return { outcome: live ? 'ok' : 'dry-ok' };
+    step(base, 'card-done', 'ok',
+      (live ? 'картку опрацьовано повністю' : 'dry-run: усі кроки пройшли перевірку')
+        + (manualReviewFields.length ? ` (поля на ручну звірку: ${manualReviewFields.join(', ')})` : ''),
+      { clientId, warehouseRef: item.warehouseRef, manualReviewFields });
+    return result(live ? 'ok' : 'dry-ok');
   } catch (err) {
     step(base, 'address-phase', 'error', `виняток: ${err.message}`, {});
     await saveShot(page, `card${item.cardIndex}-addressphase-error`);
-    return { outcome: 'error' };
+    return result('error');
   }
 }
 
@@ -858,8 +893,9 @@ async function main() {
 
   if (LIVE_MODE) {
     console.log('\n' + '#'.repeat(72));
-    console.log('УВАГА: LIVE-РЕЖИМ. Скрипт РЕАЛЬНО запише ПІБ/телефон/email, створить');
-    console.log('покупця і додасть адресу доставки в KeyCRM. Ctrl+C протягом 5с щоб скасувати.');
+    console.log('УВАГА: LIVE-РЕЖИМ. Скрипт РЕАЛЬНО запише контактні дані у ПОРОЖНІ поля,');
+    console.log('створить покупця і додасть адресу доставки в KeyCRM. Поля, де вже є ІНШЕ');
+    console.log('значення, НЕ перезаписуються (лишаються на ручну звірку). Ctrl+C за 5с щоб скасувати.');
     console.log('#'.repeat(72));
     await notify(
       `▶️ fill-client-data.js — СТАРТ LIVE-прогону.\n` +
@@ -873,7 +909,7 @@ async function main() {
   const batches = [];
   for (let i = 0; i < limited.length; i += BATCH_SIZE) batches.push(limited.slice(i, i + BATCH_SIZE));
 
-  const tally = { ok: 0, 'dry-ok': 0, 'dry-partial': 0, skipped: 0, failed: 0, error: 0 };
+  const tally = { ok: 0, 'dry-ok': 0, 'dry-partial': 0, skipped: 0, failed: 0, error: 0, manual: 0 };
   const notifyLines = [];
 
   const browser = await chromium.launch({ headless: config.HEADLESS });
@@ -901,6 +937,10 @@ async function main() {
           res = { outcome: 'error', notifyLine: `#${item.cardIndex} ${item.customerName}: виняток — ${err.message}` };
         }
         tally[res.outcome] = (tally[res.outcome] || 0) + 1;
+        if (res.manualReviewFields && res.manualReviewFields.length) {
+          tally.manual += 1;
+          notifyLines.push(`#${item.cardIndex} ${item.customerName}: дані заповнено, ЛИШИВ на ручну звірку — ${res.manualReviewFields.join(', ')} (у CRM уже було інше значення)`);
+        }
         if (res.notifyLine) notifyLines.push(res.notifyLine);
         await page.waitForTimeout(CARD_PAUSE_MS);
       }
@@ -917,8 +957,8 @@ async function main() {
     `Режим: ${LIVE_MODE ? 'LIVE' : 'DRY-RUN'}\n` +
     `Опрацьовано карток: ${limited.length}\n` +
     (LIVE_MODE
-      ? `  успішно: ${tally.ok} · провал: ${tally.failed} · помилка: ${tally.error} · пропущено: ${tally.skipped}`
-      : `  dry-ok: ${tally['dry-ok']} · dry-partial(без покупця): ${tally['dry-partial']} · провал: ${tally.failed} · помилка: ${tally.error} · пропущено: ${tally.skipped}`) +
+      ? `  успішно: ${tally.ok} · провал: ${tally.failed} · помилка: ${tally.error} · пропущено: ${tally.skipped} · ручна звірка полів: ${tally.manual}`
+      : `  dry-ok: ${tally['dry-ok']} · dry-partial(без покупця): ${tally['dry-partial']} · провал: ${tally.failed} · помилка: ${tally.error} · пропущено: ${tally.skipped} · ручна звірка полів: ${tally.manual}`) +
     (notifyLines.length ? `\nПотребують уваги:\n${notifyLines.map((l) => '  ' + l).join('\n')}` : '') +
     formatSkippedForNotify(skipped);
 
