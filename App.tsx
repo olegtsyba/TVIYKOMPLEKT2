@@ -46,9 +46,6 @@ const ZoomInIcon = () => (
     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="drop-shadow-md"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line><line x1="11" y1="8" x2="11" y2="14"></line><line x1="8" y1="11" x2="14" y2="11"></line></svg>
 );
 
-const TG_BOT_TOKEN = '7628860733:AAHrK-pL_aQ0HpJ1tB0O6uC-6C6QzO5e3i8';
-const TG_CHAT_ID = '-4763943340';
-
 const DEFAULT_SETTINGS: SiteSettings = {
   heroTitle: "NEW\nCOLLECTION",
   heroSubtitle: "Весна - Літо 2025",
@@ -386,26 +383,24 @@ export default function App() {
         return;
     }
 
-    let message = `<b>📦 НОВЕ ЗАМОВЛЕННЯ!</b>\n\n`;
-    message += `👤 <b>Клієнт:</b> ${orderForm.firstName} ${orderForm.lastName}\n`;
-    message += `📞 <b>Телефон:</b> ${orderForm.phone}\n`;
-    message += `🏙 <b>Місто:</b> ${orderForm.city}\n`;
-    message += `🚚 <b>Відділення/Поштомат НП:</b> ${orderForm.branch}\n\n`;
-    message += `🛒 <b>Товари:</b>\n`;
-    
-    (cart || []).forEach((item, index) => {
-        message += `${index + 1}. ${item.title} (${item.selectedSize}) - ${item.price} грн\n`;
-    });
-    message += `\n💰 <b>Разом до сплати:</b> ${cartTotal} грн`;
-
     try {
-      const response = await fetch(`https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage`, {
+      const response = await fetch('/api/order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          chat_id: TG_CHAT_ID,
-          parse_mode: 'html',
-          text: message
+          customer: {
+            firstName: orderForm.firstName,
+            lastName: orderForm.lastName,
+            phone: orderForm.phone,
+            city: orderForm.city,
+            branch: orderForm.branch,
+          },
+          items: (cart || []).map(item => ({
+            title: item.title,
+            size: item.selectedSize,
+            price: item.price,
+          })),
+          total: cartTotal,
         })
       });
 
@@ -416,7 +411,17 @@ export default function App() {
         setShowOrderForm(false);
         setIsCartOpen(false);
       } else {
-        showToast("❌ Помилка відправки.", "error");
+        let errorCode = '';
+        try {
+          const data = await response.json();
+          errorCode = (data && data.error) || '';
+        } catch (e) {
+          // non-JSON error body — fall through to the generic "send" message
+        }
+        showToast(
+          errorCode === 'telegram_unreachable' ? "❌ Помилка з'єднання." : "❌ Помилка відправки.",
+          "error"
+        );
       }
     } catch (error) {
       showToast("❌ Помилка з'єднання.", "error");

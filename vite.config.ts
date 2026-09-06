@@ -13,6 +13,10 @@ export default defineConfig(({ mode }) => {
             target: 'https://tviykomplekt-88100.web.app',
             changeOrigin: true,
           },
+          '/api/order': {
+            target: 'https://tviykomplekt-88100.web.app',
+            changeOrigin: true,
+          },
         },
       },
       plugins: [react()],

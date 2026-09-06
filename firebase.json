@@ -16,6 +16,10 @@
         "function": "keycrmProxy"
       },
       {
+        "source": "/api/order",
+        "function": "sendOrderNotification"
+      },
+      {
         "source": "**",
         "destination": "/index.html"
       }
