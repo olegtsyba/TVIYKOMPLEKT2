@@ -99,6 +99,7 @@ export function mapKeycrmProduct(kc: KeycrmProduct): Product {
     id: kc.id,
     title: kc.name,
     price: kc.min_price,
+    categoryId: kc.category_id,
     images,
     sizes: [],
     colors: [],
