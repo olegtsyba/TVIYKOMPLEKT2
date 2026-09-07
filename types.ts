@@ -29,6 +29,7 @@ export interface Product {
   id: number | string;
   title: string;
   price: number;
+  categoryId?: number | null; // KeyCRM category_id, used for catalog filter buttons
   oldPrice?: number;
   isNew?: boolean; // New field for "NEW" status
   badgeText?: string; // Custom promo badge (e.g. "-20%", "Чорна п'ятниця")

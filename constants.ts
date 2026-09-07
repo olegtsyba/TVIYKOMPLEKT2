@@ -1,14 +1,37 @@
 
 import { Product, SizeChart, Review, RelatedColor } from './types';
 
-export const CATEGORIES = [
+// Catalog filter buttons -> KeyCRM category_id groups.
+// `categoryIds` is matched against Product.categoryId (mapped from KeyCRM
+// `category_id` in services/keycrm.ts). Several KeyCRM categories are folded
+// into one button where the distinction is a product-card detail, not a
+// navigation criterion (e.g. the three "Комплекти" categories 5/6/9).
+//
+// Button order is fixed intentionally (see below), NOT auto-sorted by live
+// product counts, so the storefront stays predictable between deploys.
+// Counts below are LIVE counts — what the storefront actually renders, i.e.
+// after fetchAllKeycrmProducts() drops is_archived products (verified in the
+// running app 2026-09-07):
+//   1. Комбінезони/Напівкомбінезони — 19  (KeyCRM: 20, 1 архівний прихований)
+//   2. Лосини                       — 20  (KeyCRM: 22, 2 архівні приховані)
+//   3. Комплекти (усі три «комплект»-категорії) — 13
+//   4. решта — за спаданням кількості товарів:
+//      Футболки 13, Рашгарди 10, Топи 10, Шорти 7, Сукні 3;
+//      нічия 10=10 вирішена на користь Рашгардів — вище за Топи.
+// Кнопка «Всі» показує 97 товарів (KeyCRM: 100, 3 архівні приховані).
+//
+// KeyCRM categories deliberately left without a button (reachable only via
+// «Всі»): 11 Термобілизна (1 товар), 12 Аксесуари (1 товар).
+export const CATEGORIES: { id: string; label: string; categoryIds?: number[] }[] = [
   { id: 'all', label: 'Всі' },
-  { id: 'Лосини', label: 'Лосини' },
-  { id: 'Топ', label: 'Топи' },
-  { id: 'Комплект', label: 'Комплекти' },
-  { id: 'Комбінезон', label: 'Комбінезони' },
-  { id: 'Рашгард', label: 'Рашгарди' },
-  { id: 'Футболка', label: 'Футболки' }
+  { id: 'bodysuits', label: 'Комбінезони/Напівкомбінезони', categoryIds: [3, 10] },
+  { id: 'leggings', label: 'Лосини', categoryIds: [1] },
+  { id: 'sets', label: 'Комплекти', categoryIds: [5, 6, 9] },
+  { id: 'tshirts', label: 'Футболки та майки', categoryIds: [7] },
+  { id: 'rashguards', label: 'Рашгарди та лонгсліви', categoryIds: [2] },
+  { id: 'tops', label: 'Топи', categoryIds: [8] },
+  { id: 'shorts', label: 'Шорти та велосипедки', categoryIds: [4] },
+  { id: 'dresses', label: 'Сукні та спідниці', categoryIds: [13] },
 ];
 
 // Reusable Data

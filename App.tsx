@@ -275,8 +275,12 @@ export default function App() {
 
   // Derived State (Filtering)
   const filteredProducts = useMemo(() => {
+    const activeCategoryIds = CATEGORIES.find(c => c.id === activeCategory)?.categoryIds ?? null;
     return (allProducts || []).filter(product => {
-      const matchCategory = activeCategory === 'all' || product.title.toLowerCase().includes(activeCategory.toLowerCase());
+      const matchCategory = activeCategory === 'all'
+        || (activeCategoryIds != null
+            && product.categoryId != null
+            && activeCategoryIds.includes(product.categoryId));
       const matchSearch = product.title.toLowerCase().includes(searchQuery.toLowerCase());
       return matchCategory && matchSearch;
     });
