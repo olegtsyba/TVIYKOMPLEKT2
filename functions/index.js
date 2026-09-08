@@ -154,8 +154,10 @@ exports.sendOrderNotification = onRequest(
       const itemObj = item && typeof item === "object" ? item : {};
       const title = escapeHtml(itemObj.title != null ? itemObj.title : "");
       const size = escapeHtml(itemObj.size != null ? itemObj.size : "");
+      const color = isNonEmptyString(itemObj.color) ? escapeHtml(itemObj.color) : "";
       const price = Number(itemObj.price) || 0;
-      message += `${index + 1}. ${title} (${size}) - ${price} грн\n`;
+      const variant = color ? `${size}, ${color}` : size;
+      message += `${index + 1}. ${title} (${variant}) - ${price} грн\n`;
     });
     message += `\n💰 <b>Разом до сплати:</b> ${Number(total) || 0} грн`;
 

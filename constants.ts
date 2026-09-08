@@ -39,6 +39,88 @@ export const CATEGORIES: { id: string; label: string; categoryIds?: number[] }[]
 export const DEFAULT_PRODUCT_DESCRIPTION =
   'Тканина преміум якості, що дихає та не просвічує. Ідеально підходить для інтенсивних тренувань та повсякденного стилю. Анатомічний крій підкреслює фігуру.';
 
+// Canonical size ordering for sorting the size buttons on a product card.
+// A normalized label that isn't one of these (e.g. a "L-XL" range) sorts
+// after all of them, by its first component — see sizeSortKey in
+// services/keycrm.ts.
+export const SIZE_ORDER = ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL'];
+
+// KeyCRM offer colors are free-text Ukrainian, typed by different people
+// over ~a year of catalog entries: casing varies, some are plural/adjective
+// mismatches ("зелені" instead of "зелений"), a few are English with a
+// Ukrainian hint in parentheses, and there are outright typos. Casing is
+// already normalized by lowercasing before lookup (see normalizeColorLabel
+// in services/keycrm.ts) — COLOR_ALIASES only needs the entries below that
+// lowercasing alone doesn't fix. Key = raw value, trimmed + lowercased.
+// '-' is real garbage data (1 offer, catalog-wide) and maps to '' so it's
+// dropped instead of showing a fake color button.
+export const COLOR_ALIASES: Record<string, string> = {
+  'pink rose': 'рожевий',
+  'light pink (рожевий)': 'світло-рожевий',
+  'beetroot purple(рожевий)': 'рожевий',
+  'cиній': 'синій', // typed with a Latin "c", not Cyrillic
+  'сіро- бежевий': 'сіро-бежевий', // stray space before the hyphen
+  'лілові': 'ліловий',
+  'фіолетові': 'фіолетовий',
+  'вишневі': 'вишневий',
+  'зелені': 'зелений',
+  'сині': 'синій',
+  'сірі': 'сірий',
+  'червоні': 'червоний',
+  '-': '',
+};
+
+// Canonical color name -> swatch hex, for the color picker on a product
+// card. Approximate on purpose (KeyCRM gives no hex) — adjust freely if a
+// swatch looks off. A color not listed here (a future KeyCRM addition, or
+// unmapped garbage) renders with no swatch, label-only.
+export const COLOR_HEX: Record<string, string> = {
+  'чорний': '#1C1C1C',
+  'шоколад': '#6F4A32',
+  'молочний': '#F5F0E6',
+  'рожевий': '#F4A6C1',
+  'синій': '#2255A4',
+  'блакитний': '#7EC8E3',
+  'графіт': '#4A4A4A',
+  'білий': '#FFFFFF',
+  'червоний': '#C41E3A',
+  'сірий': '#8C8C8C',
+  'кремовий': '#F5E6CA',
+  'малина': '#B03060',
+  'електрик': '#0057D8',
+  'попелясто-білий': '#EDEAE4',
+  'коричневий': '#5B3A29',
+  'беж': '#E8DCC8',
+  'ліловий': '#C8A2C8',
+  'вишневий': '#7B1E3A',
+  'смарагд': '#009B77',
+  'бордовий': '#6D071A',
+  'салатовий': '#A8E10C',
+  'зелений': '#2E7D32',
+  'жовтий': '#F4D93E',
+  'персик': '#FFCBA4',
+  'оливка': '#708238',
+  'слонова кістка': '#FFFFF0',
+  'темний-смарагд': '#046A38',
+  'світло-рожевий': '#FBD1E0',
+  'фуксія': '#C2185B',
+  'пудра': '#EAC9C1',
+  'салатово-оливковий': '#A9BA3A',
+  'лимонний': '#FFF44F',
+  "м'ята": '#AAF0D1',
+  'лаванда': '#B57EDC',
+  'яскраво-рожевий': '#FF5DA2',
+  'хакі': '#C3B091',
+  'сливовий': '#5D3954',
+  'сіро-бежевий': '#C9BEB0',
+  'сірий меланж': '#A9A9A9',
+  'графіт+зелений': '#4A6A4A',
+  'ніжно-блакитний': '#BFE3F0',
+  'ніжно-рожевий': '#F7C9DA',
+  'пурпур': '#A020F0',
+  'фіолетовий': '#7B4397',
+};
+
 // Reusable Data
 const PLACEHOLDER_IMAGES = [
     "https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?auto=format&fit=crop&q=80&w=800",

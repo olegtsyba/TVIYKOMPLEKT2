@@ -25,6 +25,19 @@ export interface RelatedColor {
   colorCode: string;
 }
 
+// One real KeyCRM offer (a specific color/size combination), normalized for
+// the storefront. Produced by services/keycrm.ts#deriveVariants — the
+// catch-all "Всі кольори" placeholder offer every KeyCRM product carries is
+// already filtered out, so any entry here is a genuine purchasable variant.
+export interface ProductVariantOffer {
+  offerId: number;
+  color: string | null; // canonical color name (see constants.ts COLOR_ALIASES), null if this product has no color property
+  size: string | null;  // normalized size label, null if this product has no size property
+  price: number;
+  quantity: number; // KeyCRM stock count; NOT used to decide in-stock (see deriveVariants) — kept for future use
+  thumbnailUrl: string | null;
+}
+
 export interface Product {
   id: number | string;
   title: string;
@@ -37,6 +50,7 @@ export interface Product {
   images: string[];
   sizes: string[];
   colors: string[];
+  variantOffers?: ProductVariantOffer[]; // real KeyCRM offers, for per-color/size stock + photo lookup
   videoId?: string;
   sizeCategory?: string;
   sizeChart?: SizeChartRow[];
@@ -58,6 +72,7 @@ export interface Promotion {
 
 export interface CartItem extends Product {
   selectedSize: string;
+  selectedColor?: string;
   cartId: number;
 }
 

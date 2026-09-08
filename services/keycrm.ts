@@ -1,4 +1,5 @@
-import { Product } from '../types';
+import { Product, ProductVariantOffer } from '../types';
+import { SIZE_ORDER, COLOR_ALIASES } from '../constants';
 
 const PROXY_BASE = '/api/keycrm';
 const PAGE_LIMIT = 50;
@@ -31,6 +32,7 @@ export interface KeycrmOffer {
   id: number;
   product_id: number;
   sku: string;
+  thumbnail_url: string | null;
   price: number;
   quantity: number;
   properties: KeycrmOfferProperty[];
@@ -154,14 +156,111 @@ export function getMinOfferPrice(offers: KeycrmOffer[]): number | null {
   return Math.min(...prices);
 }
 
-export function deriveVariants(offers: KeycrmOffer[]): { sizes: string[]; colors: string[] } {
-  const sizes = new Set<string>();
-  const colors = new Set<string>();
+// Every KeyCRM product with offers also carries one placeholder offer whose
+// only property is Колір="Всі кольори" (or a case/typo variant) and no size
+// — verified catalog-wide (1870 offers, Sept 2026): it always coexists with
+// real per-color/size offers, never appears alone, and its price is NOT a
+// reliable signal (sometimes 0, sometimes a real price). Must be excluded
+// from variant derivation entirely, by value + absence of a size property.
+const CATCHALL_COLOR_VALUES = new Set(['всі кольори', 'всі кольри']);
+
+function isCatchAllOffer(offer: KeycrmOffer): boolean {
+  const props = offer.properties || [];
+  const hasSize = props.some(p => matchesHint(p.name, SIZE_PROPERTY_HINTS));
+  if (hasSize) return false;
+  const colorProp = props.find(p => matchesHint(p.name, COLOR_PROPERTY_HINTS));
+  if (!colorProp) return false;
+  return CATCHALL_COLOR_VALUES.has(colorProp.value.trim().toLowerCase());
+}
+
+// A handful of KeyCRM sizes are typed with Cyrillic look-alike letters
+// (е.g. Cyrillic "М" instead of Latin "M") that read identically but don't
+// deduplicate as strings. Map the confusable ones to Latin before comparing.
+const CYRILLIC_TO_LATIN: Record<string, string> = {
+  'А': 'A', 'а': 'a', 'В': 'B', 'в': 'b', 'Е': 'E', 'е': 'e',
+  'К': 'K', 'к': 'k', 'М': 'M', 'м': 'm', 'Н': 'H', 'н': 'h',
+  'О': 'O', 'о': 'o', 'Р': 'P', 'р': 'p', 'С': 'C', 'с': 'c',
+  'Т': 'T', 'т': 't', 'Х': 'X', 'х': 'x',
+};
+
+function normalizeSizeLabel(raw: string): string {
+  return raw
+    .split('')
+    .map(ch => CYRILLIC_TO_LATIN[ch] ?? ch)
+    .join('')
+    .trim()
+    .toUpperCase();
+}
+
+// '-' and similar non-alphabetic entries are garbage data (KeyCRM sizes are
+// always word-like: "S", "M", "L-XL", ...) — drop them rather than showing a
+// meaningless size button.
+function isJunkSizeLabel(label: string): boolean {
+  return !/[A-Z]/.test(label);
+}
+
+// Sorts by the rank of the label's first component in SIZE_ORDER, so a range
+// like "L-XL" sorts next to "L". Unrecognized labels sort after all known
+// ones, alphabetically among themselves.
+function sizeSortKey(label: string): number {
+  const firstToken = label.split(/[^A-Z]+/).find(Boolean) ?? label;
+  const idx = SIZE_ORDER.indexOf(firstToken);
+  return idx === -1 ? Number.POSITIVE_INFINITY : idx;
+}
+
+// Folds casing + the known typo/plural/bilingual variants (COLOR_ALIASES)
+// into one canonical name. '-' (real garbage in the catalog) maps to ''.
+function normalizeColorLabel(raw: string): string {
+  const key = raw.trim().toLowerCase();
+  return COLOR_ALIASES[key] ?? key;
+}
+
+export interface ProductVariants {
+  sizes: string[];
+  colors: string[];
+  variantOffers: ProductVariantOffer[];
+}
+
+export function deriveVariants(offers: KeycrmOffer[]): ProductVariants {
+  const sizesSet = new Set<string>();
+  const colorsSet = new Set<string>();
+  const variantOffers: ProductVariantOffer[] = [];
+
   offers.forEach(offer => {
+    if (isCatchAllOffer(offer)) return;
+
+    let color: string | null = null;
+    let size: string | null = null;
     (offer.properties || []).forEach(prop => {
-      if (matchesHint(prop.name, SIZE_PROPERTY_HINTS)) sizes.add(prop.value);
-      else if (matchesHint(prop.name, COLOR_PROPERTY_HINTS)) colors.add(prop.value);
+      if (matchesHint(prop.name, SIZE_PROPERTY_HINTS)) {
+        const normalized = normalizeSizeLabel(prop.value);
+        if (!isJunkSizeLabel(normalized)) {
+          size = normalized;
+          sizesSet.add(normalized);
+        }
+      } else if (matchesHint(prop.name, COLOR_PROPERTY_HINTS)) {
+        const normalized = normalizeColorLabel(prop.value);
+        if (normalized) {
+          color = normalized;
+          colorsSet.add(normalized);
+        }
+      }
+    });
+
+    variantOffers.push({
+      offerId: offer.id,
+      color,
+      size,
+      price: offer.price,
+      quantity: offer.quantity,
+      thumbnailUrl: offer.thumbnail_url ?? null,
     });
   });
-  return { sizes: Array.from(sizes), colors: Array.from(colors) };
+
+  const sizes = Array.from(sizesSet).sort((a, b) => {
+    const rank = sizeSortKey(a) - sizeSortKey(b);
+    return rank !== 0 ? rank : a.localeCompare(b);
+  });
+
+  return { sizes, colors: Array.from(colorsSet), variantOffers };
 }

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import ReactDOM from 'react-dom/client';
-import { PRODUCTS, CATEGORIES, SIZE_CHARTS, DEFAULT_PRODUCT_DESCRIPTION } from './constants';
+import { PRODUCTS, CATEGORIES, SIZE_CHARTS, DEFAULT_PRODUCT_DESCRIPTION, COLOR_HEX } from './constants';
 import { Product, CartItem, SiteSettings, Review, SizeChartRow } from './types';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from './firebase';
@@ -73,6 +73,8 @@ export default function App() {
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [selectedSizeForModal, setSelectedSizeForModal] = useState<string>('');
+  const [selectedColorForModal, setSelectedColorForModal] = useState<string>('');
+  const [colorImageOverride, setColorImageOverride] = useState<string | null>(null);
   const [visibleCount, setVisibleCount] = useState(8);
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -153,15 +155,18 @@ export default function App() {
               try {
                 const offers = await fetchOffersForProduct(p.id);
                 const minPrice = getMinOfferPrice(offers);
-                const { sizes, colors } = deriveVariants(offers);
+                const { sizes, colors, variantOffers } = deriveVariants(offers);
                 variantsLoadedRef.current.add(String(p.id));
-                if (minPrice === null) return;
 
-                setAllProducts(prev => prev.map(item => (
-                  String(item.id) === String(p.id)
-                    ? applyPromotion({ ...item, price: minPrice, sizes, colors }, promotions.get(String(p.id)))
-                    : item
-                )));
+                setAllProducts(prev => prev.map(item => {
+                  if (String(item.id) !== String(p.id)) return item;
+                  const withVariants = { ...item, sizes, colors, variantOffers };
+                  // minPrice can stay null if none of this product's offers carry
+                  // a positive price — still worth applying sizes/colors then.
+                  return minPrice !== null
+                    ? applyPromotion({ ...withVariants, price: minPrice }, promotions.get(String(p.id)))
+                    : withVariants;
+                }));
               } catch (err) {
                 console.warn("Could not resolve price from offers for product", p.id, err);
               }
@@ -222,11 +227,25 @@ export default function App() {
       setShowVideoAccordion(false);
       setShowReviewsAccordion(false);
       setSelectedSizeForModal('');
+      setSelectedColorForModal('');
+      setColorImageOverride(null);
       setSizeError(false);
       setIsLightboxOpen(false);
       setLightboxItems([]);
     }
   }, [selectedProduct]);
+
+  // Swap the hero photo for the offer's own thumbnail when a color with one
+  // is selected; otherwise fall back to the product's regular gallery.
+  useEffect(() => {
+    if (!selectedProduct || !selectedColorForModal) {
+      setColorImageOverride(null);
+      return;
+    }
+    const offerWithPhoto = (selectedProduct.variantOffers || [])
+      .find(o => o.color === selectedColorForModal && o.thumbnailUrl);
+    setColorImageOverride(offerWithPhoto ? offerWithPhoto.thumbnailUrl : null);
+  }, [selectedColorForModal, selectedProduct]);
 
   // Lazily load sizes/colors (KeyCRM offers) the first time a product is opened
   useEffect(() => {
@@ -238,12 +257,12 @@ export default function App() {
     (async () => {
       try {
         const offers = await fetchOffersForProduct(selectedProduct.id);
-        const { sizes, colors } = deriveVariants(offers);
+        const { sizes, colors, variantOffers } = deriveVariants(offers);
         variantsLoadedRef.current.add(productKey);
         if (cancelled) return;
 
-        setAllProducts(prev => prev.map(p => String(p.id) === productKey ? { ...p, sizes, colors } : p));
-        setSelectedProduct(prev => prev && String(prev.id) === productKey ? { ...prev, sizes, colors } : prev);
+        setAllProducts(prev => prev.map(p => String(p.id) === productKey ? { ...p, sizes, colors, variantOffers } : p));
+        setSelectedProduct(prev => prev && String(prev.id) === productKey ? { ...prev, sizes, colors, variantOffers } : prev);
       } catch (err) {
         console.warn("Could not load product variants from KeyCRM", selectedProduct.id, err);
       }
@@ -314,19 +333,23 @@ export default function App() {
   };
 
   // Cart Logic
-  const addToCart = (product: Product, size: string) => {
+  const addToCart = (product: Product, size: string, color?: string) => {
     if (product.sizes && product.sizes.length > 0 && !size) {
       showToast("⚠️ Оберіть розмір!", "error");
       setSizeError(true);
-      setTimeout(() => setSizeError(false), 600); 
+      setTimeout(() => setSizeError(false), 600);
+      return;
+    }
+    if (!isVariantAvailable(color || '', size)) {
+      showToast("❌ Цієї комбінації немає в наявності", "error");
       return;
     }
     const finalSize = size || "One Size";
-    const newItem: CartItem = { ...product, selectedSize: finalSize, cartId: Date.now() };
+    const newItem: CartItem = { ...product, selectedSize: finalSize, selectedColor: color || undefined, cartId: Date.now() };
     setCart([...(cart || []), newItem]);
     showToast(`✅ ${product.title} додано!`);
     setIsCartOpen(true);
-    setSelectedProduct(null); 
+    setSelectedProduct(null);
   };
 
   const removeFromCart = (index: number) => {
@@ -402,6 +425,7 @@ export default function App() {
           items: (cart || []).map(item => ({
             title: item.title,
             size: item.selectedSize,
+            color: item.selectedColor,
             price: item.price,
           })),
           total: cartTotal,
@@ -432,11 +456,6 @@ export default function App() {
     }
   };
 
-  const switchColor = (newId: number | string) => {
-      const newProduct = allProducts.find(p => p.id === newId);
-      if (newProduct) setSelectedProduct(newProduct);
-  };
-
   // Determine which size chart to use
   const activeSizeChart = useMemo(() => {
     if (!selectedProduct) return null;
@@ -451,8 +470,31 @@ export default function App() {
         return { type: 'static', data: SIZE_CHARTS[selectedProduct.sizeCategory] }; 
     }
     
-    return { type: 'static', data: SIZE_CHARTS['default'] }; 
+    return { type: 'static', data: SIZE_CHARTS['default'] };
   }, [selectedProduct]);
+
+  // KeyCRM `quantity` doesn't reliably mean "in stock" for this shop (89% of
+  // real offers sit at quantity<=0 while the product is actively sold —
+  // fulfilment is manual, not live-inventory-gated). So "в наявності" here
+  // means "this exact color/size combination exists as a real KeyCRM offer",
+  // not "quantity > 0". A product with no offer data at all (still loading,
+  // or genuinely has none) is treated as available rather than blocking a sale.
+  const isVariantAvailable = (color: string, size: string): boolean => {
+    const offers = selectedProduct?.variantOffers;
+    if (!offers || offers.length === 0) return true;
+    return offers.some(o =>
+      (!color || o.color === color) &&
+      (!size || o.size === size)
+    );
+  };
+
+  const isCurrentSelectionAvailable = selectedProduct
+    ? isVariantAvailable(selectedColorForModal, selectedSizeForModal)
+    : true;
+
+  const handleSelectColor = (color: string) => {
+    setSelectedColorForModal(color);
+  };
 
   // Calculate Average Rating
   const averageRating = useMemo(() => {
@@ -769,9 +811,9 @@ export default function App() {
                                        >
                                             {images && images.length > 0 && (
                                                 <>
-                                                    <img 
-                                                        src={getImageUrl(images[currentImageIndex] || images[0])} 
-                                                        alt={selectedProduct.title} 
+                                                    <img
+                                                        src={getImageUrl(colorImageOverride || images[currentImageIndex] || images[0])}
+                                                        alt={selectedProduct.title}
                                                         className="w-full h-full object-contain object-center bg-gray-50 transition-transform duration-300"
                                                     />
                                                     <div className="absolute top-4 left-4 bg-white/80 p-2 rounded-full opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
@@ -849,25 +891,32 @@ export default function App() {
                                 <p className="whitespace-pre-line">{selectedProduct.description || DEFAULT_PRODUCT_DESCRIPTION}</p>
                             </div>
 
-                            {/* Color Selection */}
-                            {selectedProduct.relatedColors && selectedProduct.relatedColors.length > 0 && (
+                            {/* Color Selection — real KeyCRM offer colors */}
+                            {selectedProduct.colors && selectedProduct.colors.length > 0 && (
                                 <div className="mb-6">
-                                    <p className="text-xs uppercase font-bold tracking-wider mb-2">Оберіть колір: <span className="text-gray-500 font-normal">{selectedProduct.relatedColors.find(c => c.id === selectedProduct.id)?.name}</span></p>
-                                    <div className="flex gap-3">
-                                        {selectedProduct.relatedColors.map(color => (
-                                            <button
-                                                key={color.id}
-                                                onClick={() => switchColor(color.id)}
-                                                className={`w-8 h-8 rounded-full border border-gray-200 transition-all duration-200 ${
-                                                    selectedProduct.id === color.id 
-                                                    ? 'ring-2 ring-offset-2 ring-black scale-110 shadow-sm' 
-                                                    : 'hover:scale-110 hover:shadow-sm'
-                                                }`}
-                                                style={{ backgroundColor: color.colorCode }}
-                                                title={color.name}
-                                                aria-label={color.name}
-                                            />
-                                        ))}
+                                    <p className="text-xs uppercase font-bold tracking-wider mb-2">
+                                        Оберіть колір: <span className="text-gray-500 font-normal">{selectedColorForModal || ''}</span>
+                                    </p>
+                                    <div className="flex flex-wrap gap-3">
+                                        {selectedProduct.colors.map(color => {
+                                            const hex = COLOR_HEX[color];
+                                            return (
+                                                <button
+                                                    key={color}
+                                                    onClick={() => handleSelectColor(color)}
+                                                    className={`w-8 h-8 rounded-full border transition-all duration-200 ${
+                                                        selectedColorForModal === color
+                                                        ? 'ring-2 ring-offset-2 ring-black scale-110 shadow-sm'
+                                                        : 'hover:scale-110 hover:shadow-sm'
+                                                    } ${hex ? 'border-gray-200' : 'border-gray-300 bg-gray-100 flex items-center justify-center'}`}
+                                                    style={hex ? { backgroundColor: hex } : undefined}
+                                                    title={color}
+                                                    aria-label={color}
+                                                >
+                                                    {!hex && <span className="text-[8px] text-gray-500">?</span>}
+                                                </button>
+                                            );
+                                        })}
                                     </div>
                                 </div>
                             )}
@@ -938,31 +987,51 @@ export default function App() {
                                 </div>
 
                                 <div className={`flex flex-wrap gap-3 p-2 rounded transition-all duration-300 ${sizeError ? 'input-error bg-red-50' : 'border border-transparent'}`}>
-                                    {selectedProduct.sizes && selectedProduct.sizes.length > 0 ? selectedProduct.sizes.map(size => (
-                                        <button
-                                            key={size}
-                                            onClick={() => {
-                                                setSelectedSizeForModal(size);
-                                                setSizeError(false);
-                                            }}
-                                            className={`w-12 h-12 flex items-center justify-center border text-sm transition-all duration-200 ${
-                                                selectedSizeForModal === size 
-                                                ? 'border-black bg-black text-white shadow-md transform scale-105' 
-                                                : 'border-gray-200 hover:border-black text-gray-700'
-                                            }`}
-                                        >
-                                            {size}
-                                        </button>
-                                    )) : (
+                                    {selectedProduct.sizes && selectedProduct.sizes.length > 0 ? selectedProduct.sizes.map(size => {
+                                        const available = isVariantAvailable(selectedColorForModal, size);
+                                        return (
+                                            <button
+                                                key={size}
+                                                disabled={!available}
+                                                onClick={() => {
+                                                    setSelectedSizeForModal(size);
+                                                    setSizeError(false);
+                                                }}
+                                                title={available ? undefined : 'Немає в наявності для обраного кольору'}
+                                                className={`w-12 h-12 flex items-center justify-center border text-sm transition-all duration-200 ${
+                                                    !available
+                                                    ? 'border-gray-100 text-gray-300 cursor-not-allowed line-through'
+                                                    : selectedSizeForModal === size
+                                                        ? 'border-black bg-black text-white shadow-md transform scale-105'
+                                                        : 'border-gray-200 hover:border-black text-gray-700'
+                                                }`}
+                                            >
+                                                {size}
+                                            </button>
+                                        );
+                                    }) : (
                                         <span className="text-sm text-gray-500 italic">Універсальний розмір</span>
                                     )}
                                 </div>
                             </div>
 
+                            {/* Stock indicator — binary by design (no exact counts): whether this
+                                exact color/size combination exists as a real KeyCRM offer. */}
+                            {(selectedSizeForModal || selectedColorForModal) && (
+                                <p className={`text-xs font-medium mb-3 ${isCurrentSelectionAvailable ? 'text-green-700' : 'text-red-600'}`}>
+                                    {isCurrentSelectionAvailable ? '✅ В наявності' : '❌ Немає в наявності'}
+                                </p>
+                            )}
+
                             {/* Buy Button */}
-                            <button 
-                                onClick={() => addToCart(selectedProduct, selectedSizeForModal)}
-                                className="w-full bg-black text-white py-4 uppercase tracking-widest text-sm font-bold hover:bg-gray-800 transition-colors shadow-lg mb-6"
+                            <button
+                                onClick={() => addToCart(selectedProduct, selectedSizeForModal, selectedColorForModal)}
+                                disabled={!isCurrentSelectionAvailable}
+                                className={`w-full py-4 uppercase tracking-widest text-sm font-bold transition-colors shadow-lg mb-6 ${
+                                    isCurrentSelectionAvailable
+                                    ? 'bg-black text-white hover:bg-gray-800'
+                                    : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                                }`}
                             >
                                 Додати в кошик
                             </button>
@@ -1156,7 +1225,10 @@ export default function App() {
                             <div className="flex-1 flex flex-col justify-between">
                                 <div>
                                     <h4 className="font-serif text-sm uppercase mb-1">{item.title}</h4>
-                                    <p className="text-xs text-gray-500">Розмір: {item.selectedSize}</p>
+                                    <p className="text-xs text-gray-500">
+                                        Розмір: {item.selectedSize}
+                                        {item.selectedColor && ` · Колір: ${item.selectedColor}`}
+                                    </p>
                                 </div>
                                 <div className="flex justify-between items-end">
                                     <span className="font-semibold text-sm">{item.price} UAH</span>
