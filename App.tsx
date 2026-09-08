@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import ReactDOM from 'react-dom/client';
-import { PRODUCTS, CATEGORIES, SIZE_CHARTS } from './constants';
+import { PRODUCTS, CATEGORIES, SIZE_CHARTS, DEFAULT_PRODUCT_DESCRIPTION } from './constants';
 import { Product, CartItem, SiteSettings, Review, SizeChartRow } from './types';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from './firebase';
@@ -846,7 +846,7 @@ export default function App() {
                             </div>
 
                             <div className="text-gray-600 text-sm leading-relaxed border-t border-gray-100 py-6 mb-6">
-                                <p>Опис: Тканина преміум якості, що дихає та не просвічує. Ідеально підходить для інтенсивних тренувань та повсякденного стилю. Анатомічний крій підкреслює фігуру.</p>
+                                <p className="whitespace-pre-line">{selectedProduct.description || DEFAULT_PRODUCT_DESCRIPTION}</p>
                             </div>
 
                             {/* Color Selection */}

@@ -34,6 +34,11 @@ export const CATEGORIES: { id: string; label: string; categoryIds?: number[] }[]
   { id: 'dresses', label: 'Сукні та спідниці', categoryIds: [13] },
 ];
 
+// Shown on the product card when a KeyCRM product has no usable description
+// (most products currently have none; sanitizeDescription can also return '').
+export const DEFAULT_PRODUCT_DESCRIPTION =
+  'Тканина преміум якості, що дихає та не просвічує. Ідеально підходить для інтенсивних тренувань та повсякденного стилю. Анатомічний крій підкреслює фігуру.';
+
 // Reusable Data
 const PLACEHOLDER_IMAGES = [
     "https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?auto=format&fit=crop&q=80&w=800",

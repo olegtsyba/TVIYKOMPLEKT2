@@ -90,6 +90,40 @@ function isWithinDays(dateStr: string, days: number): boolean {
   return Date.now() - created <= days * 24 * 60 * 60 * 1000;
 }
 
+// KeyCRM product descriptions are free text written for internal use. They
+// often end with a supplier / wholesale block (price lists, dropship links,
+// Google Sheets) that must never reach the storefront. sanitizeDescription
+// cuts that block and any stray URLs, keeps the human-facing copy and emoji,
+// and tidies whitespace. Returns '' when nothing usable is left — the UI then
+// falls back to DEFAULT_PRODUCT_DESCRIPTION.
+const SUPPLIER_BLOCK_MARKER = /^[ \t]*(Наявність|ОПТ|Опт|Наличие)\s*:/im;
+// Also eat any inline spaces before the link so removing it mid-sentence
+// doesn't leave a double space.
+const BARE_URL = /[ \t]*\bhttps?:\/\/\S+/gi;
+const BARE_WWW = /[ \t]*\bwww\.\S+/gi;
+
+export function sanitizeDescription(raw: string | null | undefined): string {
+  if (!raw) return '';
+  let text = raw;
+
+  // 1. Drop the supplier/wholesale block and everything after its marker.
+  const marker = text.match(SUPPLIER_BLOCK_MARKER);
+  if (marker && marker.index !== undefined) {
+    text = text.slice(0, marker.index);
+  }
+
+  // 2. Strip any links left elsewhere in the copy.
+  text = text.replace(BARE_URL, '').replace(BARE_WWW, '');
+
+  // 3. Tidy whitespace: trailing spaces per line, runs of blank lines, ends.
+  text = text
+    .replace(/[ \t]+$/gm, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+
+  return text;
+}
+
 export function mapKeycrmProduct(kc: KeycrmProduct): Product {
   const images = kc.attachments_data && kc.attachments_data.length > 0
     ? kc.attachments_data
@@ -100,6 +134,7 @@ export function mapKeycrmProduct(kc: KeycrmProduct): Product {
     title: kc.name,
     price: kc.min_price,
     categoryId: kc.category_id,
+    description: sanitizeDescription(kc.description) || undefined,
     images,
     sizes: [],
     colors: [],
