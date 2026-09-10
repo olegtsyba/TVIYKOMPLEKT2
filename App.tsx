@@ -6,7 +6,7 @@ import { doc, getDoc } from 'firebase/firestore';
 import { db } from './firebase';
 import {
   fetchAllKeycrmProducts, fetchOffersForProduct, mapKeycrmProduct, deriveVariants,
-  fetchAllKeycrmOffers, deriveVariantsByProduct, readCachedOfferVariants, writeCachedOfferVariants,
+  fetchAllKeycrmOffers, deriveVariantsByProduct, readCachedOfferVariants, writeCachedOfferVariants, sizeSortKey,
   type KeycrmOffer, type ProductVariants,
 } from './services/keycrm';
 import { fetchActivePromotions, applyPromotion } from './services/promotions';
@@ -110,6 +110,7 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState('all');
   const [selectedColors, setSelectedColors] = useState<Set<string>>(new Set());
+  const [selectedSizes, setSelectedSizes] = useState<Set<string>>(new Set());
   const [priceRange, setPriceRange] = useState<[number, number] | null>(null);
   const [sortOption, setSortOption] = useState<'default' | 'price-asc' | 'price-desc'>('default');
   const [isFilterSheetOpen, setIsFilterSheetOpen] = useState(false);
@@ -385,6 +386,12 @@ export default function App() {
     return Array.from(set).sort((a, b) => a.localeCompare(b, 'uk'));
   }, [allProducts]);
 
+  const availableSizes = useMemo(() => {
+    const set = new Set<string>();
+    (allProducts || []).forEach(p => (p.sizes || []).forEach(s => set.add(s)));
+    return Array.from(set).sort((a, b) => sizeSortKey(a) - sizeSortKey(b) || a.localeCompare(b));
+  }, [allProducts]);
+
   const priceBounds = useMemo<[number, number]>(() => {
     const prices = (allProducts || []).map(p => p.price).filter(p => typeof p === 'number' && p > 0);
     if (prices.length === 0) return [0, 0];
@@ -411,11 +418,13 @@ export default function App() {
       const matchSearch = product.title.toLowerCase().includes(searchQuery.toLowerCase());
       const matchColor = selectedColors.size === 0
         || (product.colors || []).some(c => selectedColors.has(c));
+      const matchSize = selectedSizes.size === 0
+        || (product.sizes || []).some(s => selectedSizes.has(s));
       // Products with no resolved price yet ("Ціна уточнюється") always pass
       // the price filter - a price of 0 isn't a comparable number yet.
       const matchPrice = !priceRange || product.price === 0
         || (product.price >= priceRange[0] && product.price <= priceRange[1]);
-      return matchCategory && matchSearch && matchColor && matchPrice;
+      return matchCategory && matchSearch && matchColor && matchSize && matchPrice;
     });
 
     if (sortOption === 'default') return filtered;
@@ -428,7 +437,7 @@ export default function App() {
       if (!aHas) return 0;
       return dir * (a.price - b.price);
     });
-  }, [activeCategory, searchQuery, allProducts, selectedColors, priceRange, sortOption]);
+  }, [activeCategory, searchQuery, allProducts, selectedColors, selectedSizes, priceRange, sortOption]);
 
   const displayedProducts = filteredProducts.slice(0, visibleCount);
 
@@ -822,12 +831,19 @@ export default function App() {
                 if (next.has(color)) next.delete(color); else next.add(color);
                 return next;
               })}
+              availableSizes={availableSizes}
+              selectedSizes={selectedSizes}
+              onToggleSize={(size) => setSelectedSizes(prev => {
+                const next = new Set(prev);
+                if (next.has(size)) next.delete(size); else next.add(size);
+                return next;
+              })}
               priceBounds={priceBounds}
               priceRange={priceRange ?? priceBounds}
               onChangePriceRange={setPriceRange}
               sortOption={sortOption}
               onChangeSort={setSortOption}
-              onReset={() => { setSelectedColors(new Set()); setPriceRange(priceBounds); setSortOption('default'); }}
+              onReset={() => { setActiveCategory('all'); setVisibleCount(8); setSelectedColors(new Set()); setSelectedSizes(new Set()); setPriceRange(priceBounds); setSortOption('default'); }}
             />
           </aside>
 
@@ -839,7 +855,7 @@ export default function App() {
                 className="flex items-center gap-2 border border-black px-5 py-2 text-xs uppercase tracking-widest hover:bg-black hover:text-white transition-all duration-300"
               >
                 Фільтри
-                {(selectedColors.size > 0 || (priceRange != null && (priceRange[0] !== priceBounds[0] || priceRange[1] !== priceBounds[1])) || sortOption !== 'default') && (
+                {(selectedColors.size > 0 || selectedSizes.size > 0 || (priceRange != null && (priceRange[0] !== priceBounds[0] || priceRange[1] !== priceBounds[1])) || sortOption !== 'default') && (
                   <span className="w-2 h-2 rounded-full bg-red-600" />
                 )}
               </button>
@@ -902,7 +918,7 @@ export default function App() {
             <div className="text-center py-20 text-gray-400">
                 <p>Товарів не знайдено :(</p>
                 <button 
-                    onClick={() => { setSearchQuery(''); setActiveCategory('all'); setSelectedColors(new Set()); setPriceRange(priceBounds); setSortOption('default'); }}
+                    onClick={() => { setSearchQuery(''); setActiveCategory('all'); setSelectedColors(new Set()); setSelectedSizes(new Set()); setPriceRange(priceBounds); setSortOption('default'); }}
                     className="mt-4 text-black underline text-sm"
                 >
                     Скинути фільтри
@@ -948,12 +964,19 @@ export default function App() {
                 if (next.has(color)) next.delete(color); else next.add(color);
                 return next;
               })}
+              availableSizes={availableSizes}
+              selectedSizes={selectedSizes}
+              onToggleSize={(size) => setSelectedSizes(prev => {
+                const next = new Set(prev);
+                if (next.has(size)) next.delete(size); else next.add(size);
+                return next;
+              })}
               priceBounds={priceBounds}
               priceRange={priceRange ?? priceBounds}
               onChangePriceRange={setPriceRange}
               sortOption={sortOption}
               onChangeSort={setSortOption}
-              onReset={() => { setSelectedColors(new Set()); setPriceRange(priceBounds); setSortOption('default'); }}
+              onReset={() => { setActiveCategory('all'); setVisibleCount(8); setSelectedColors(new Set()); setSelectedSizes(new Set()); setPriceRange(priceBounds); setSortOption('default'); }}
             />
             <button
               onClick={() => setIsFilterSheetOpen(false)}

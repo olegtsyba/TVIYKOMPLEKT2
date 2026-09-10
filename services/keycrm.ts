@@ -248,7 +248,7 @@ function isJunkSizeLabel(label: string): boolean {
 // Sorts by the rank of the label's first component in SIZE_ORDER, so a range
 // like "L-XL" sorts next to "L". Unrecognized labels sort after all known
 // ones, alphabetically among themselves.
-function sizeSortKey(label: string): number {
+export function sizeSortKey(label: string): number {
   const firstToken = label.split(/[^A-Z]+/).find(Boolean) ?? label;
   const idx = SIZE_ORDER.indexOf(firstToken);
   return idx === -1 ? Number.POSITIVE_INFINITY : idx;

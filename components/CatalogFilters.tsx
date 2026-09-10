@@ -15,6 +15,9 @@ interface CatalogFiltersProps {
   availableColors: string[];
   selectedColors: Set<string>;
   onToggleColor: (color: string) => void;
+  availableSizes: string[];
+  selectedSizes: Set<string>;
+  onToggleSize: (size: string) => void;
   priceBounds: [number, number];
   priceRange: [number, number];
   onChangePriceRange: (range: [number, number]) => void;
@@ -66,6 +69,9 @@ export default function CatalogFilters({
   availableColors,
   selectedColors,
   onToggleColor,
+  availableSizes,
+  selectedSizes,
+  onToggleSize,
   priceBounds,
   priceRange,
   onChangePriceRange,
@@ -150,6 +156,33 @@ export default function CatalogFilters({
           </div>
         ) : (
           <p className="text-sm text-gray-400">Завантаження кольорів...</p>
+        )}
+      </FilterSection>
+
+      {/* Size */}
+      <FilterSection title="Розмір" badge={selectedSizes.size}>
+        {availableSizes.length > 0 ? (
+          <div className="flex flex-wrap gap-2">
+            {availableSizes.map(size => {
+              const isSelected = selectedSizes.has(size);
+              return (
+                <button
+                  key={size}
+                  onClick={() => onToggleSize(size)}
+                  aria-pressed={isSelected}
+                  className={`min-w-[2.5rem] h-10 px-2 flex items-center justify-center border text-sm transition-all duration-200 ${
+                    isSelected
+                      ? 'border-black bg-black text-white'
+                      : 'border-gray-200 hover:border-black text-gray-700'
+                  }`}
+                >
+                  {size}
+                </button>
+              );
+            })}
+          </div>
+        ) : (
+          <p className="text-sm text-gray-400">Завантаження розмірів...</p>
         )}
       </FilterSection>
 
