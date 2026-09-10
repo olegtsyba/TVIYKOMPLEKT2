@@ -1185,7 +1185,7 @@ export default function App() {
                                 </p>
                                 <div className="space-y-3">
                                   {selectedProduct.extraVideos.map((url, i) => (
-                                    <video key={i} src={url} controls playsInline className="w-full rounded-sm shadow-sm bg-black aspect-video" />
+                                    <video key={i} src={url} controls playsInline className="aspect-[9/16] w-[280px] max-w-full mx-auto rounded-sm shadow-sm bg-black" />
                                   ))}
                                 </div>
                               </div>
