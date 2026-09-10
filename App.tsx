@@ -4,10 +4,15 @@ import { PRODUCTS, CATEGORIES, SIZE_CHARTS, DEFAULT_PRODUCT_DESCRIPTION, COLOR_H
 import { Product, CartItem, SiteSettings, Review, SizeChartRow } from './types';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from './firebase';
-import { fetchAllKeycrmProducts, fetchOffersForProduct, mapKeycrmProduct, deriveVariants, getMinOfferPrice } from './services/keycrm';
+import {
+  fetchAllKeycrmProducts, fetchOffersForProduct, mapKeycrmProduct, deriveVariants,
+  fetchAllKeycrmOffers, deriveVariantsByProduct, readCachedOfferVariants, writeCachedOfferVariants,
+  type KeycrmOffer, type ProductVariants,
+} from './services/keycrm';
 import { fetchActivePromotions, applyPromotion } from './services/promotions';
 import { fetchProductMediaMap, applyProductMedia } from './services/productMedia';
 import { fetchProductReviewsMap, applyProductReviews } from './services/productReviews';
+import CatalogFilters from './components/CatalogFilters';
 
 // Icons using SVG components
 const SearchIcon = () => (
@@ -104,6 +109,11 @@ export default function App() {
   // UI State
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState('all');
+  const [selectedColors, setSelectedColors] = useState<Set<string>>(new Set());
+  const [priceRange, setPriceRange] = useState<[number, number] | null>(null);
+  const [sortOption, setSortOption] = useState<'default' | 'price-asc' | 'price-desc'>('default');
+  const [isFilterSheetOpen, setIsFilterSheetOpen] = useState(false);
+  const priceRangeInitializedRef = useRef(false);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
@@ -200,34 +210,53 @@ export default function App() {
             .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
             .map(mapKeycrmProduct);
 
-          // Render the grid immediately with what we have. A handful of KeyCRM
-          // products report min_price=0 on the list endpoint even though their
-          // offers carry real prices — those get patched in the background
-          // below so the first paint isn't blocked on extra requests.
+          // Render the grid immediately with what we have.
           setAllProducts(products.map(p => applyProductReviews(applyProductMedia(applyPromotion(p, promotions.get(String(p.id))), productMedia.get(String(p.id))), productReviews.get(String(p.id)))));
 
-          const zeroPriceProducts = products.filter(p => p.price === 0);
-          if (zeroPriceProducts.length > 0) {
-            void Promise.all(zeroPriceProducts.map(async (p) => {
-              try {
-                const offers = await fetchOffersForProduct(p.id);
-                const minPrice = getMinOfferPrice(offers);
-                const { sizes, colors, variantOffers } = deriveVariants(offers);
-                variantsLoadedRef.current.add(String(p.id));
-
-                setAllProducts(prev => prev.map(item => {
-                  if (String(item.id) !== String(p.id)) return item;
-                  const withVariants = { ...item, sizes, colors, variantOffers };
-                  // minPrice can stay null if none of this product's offers carry
-                  // a positive price — still worth applying sizes/colors then.
-                  return minPrice !== null
-                    ? applyPromotion({ ...withVariants, price: minPrice }, promotions.get(String(p.id)))
-                    : withVariants;
-                }));
-              } catch (err) {
-                console.warn("Could not resolve price from offers for product", p.id, err);
-              }
+          // Sizes/colors/variantOffers for the WHOLE catalog, not just products
+          // the user has opened - the color filter's swatch list needs every
+          // real color up front. Also patches the handful of KeyCRM products
+          // that report min_price=0 on the list endpoint even though their
+          // offers carry a real price. Cached in sessionStorage so repeat
+          // catalog visits within the same tab skip the ~39-page bulk fetch.
+          const applyVariantsMap = (variantsMap: Record<string, ProductVariants>) => {
+            Object.keys(variantsMap).forEach(id => variantsLoadedRef.current.add(id));
+            setAllProducts(prev => prev.map(item => {
+              const v = variantsMap[String(item.id)];
+              if (!v) return item;
+              const withVariants = { ...item, sizes: v.sizes, colors: v.colors, variantOffers: v.variantOffers };
+              if (item.price > 0) return withVariants;
+              const positivePrices = v.variantOffers.map(o => o.price).filter(p => typeof p === 'number' && p > 0);
+              return positivePrices.length > 0
+                ? applyPromotion({ ...withVariants, price: Math.min(...positivePrices) }, promotions.get(String(item.id)))
+                : withVariants;
             }));
+          };
+
+          const cachedVariants = readCachedOfferVariants();
+          if (cachedVariants) {
+            applyVariantsMap(cachedVariants);
+          } else {
+            void (async () => {
+              try {
+                let accumulated: KeycrmOffer[] = [];
+                let pageCount = 0;
+                const allOffers = await fetchAllKeycrmOffers((pageOffers) => {
+                  accumulated = accumulated.concat(pageOffers);
+                  pageCount += 1;
+                  // Merge incrementally every few pages so the color filter
+                  // fills in progressively instead of freezing for ~15-20s.
+                  if (pageCount % 5 === 0) {
+                    applyVariantsMap(deriveVariantsByProduct(accumulated));
+                  }
+                });
+                const finalMap = deriveVariantsByProduct(allOffers);
+                applyVariantsMap(finalMap);
+                writeCachedOfferVariants(finalMap);
+              } catch (err) {
+                console.warn("Could not bulk-load product variants from KeyCRM offers", err);
+              }
+            })();
           }
         } catch (error) {
           console.error("Error fetching KeyCRM catalog, falling back to static list", error);
@@ -350,17 +379,56 @@ export default function App() {
   }, [isSearchOpen]);
 
   // Derived State (Filtering)
+  const availableColors = useMemo(() => {
+    const set = new Set<string>();
+    (allProducts || []).forEach(p => (p.colors || []).forEach(c => set.add(c)));
+    return Array.from(set).sort((a, b) => a.localeCompare(b, 'uk'));
+  }, [allProducts]);
+
+  const priceBounds = useMemo<[number, number]>(() => {
+    const prices = (allProducts || []).map(p => p.price).filter(p => typeof p === 'number' && p > 0);
+    if (prices.length === 0) return [0, 0];
+    return [Math.min(...prices), Math.max(...prices)];
+  }, [allProducts]);
+
+  // Initialize the price slider to the full catalog range exactly once, the
+  // first time real bounds are known - avoids resetting the user's chosen
+  // range every time allProducts updates (background price/variant patches).
+  useEffect(() => {
+    if (priceRangeInitializedRef.current) return;
+    if (priceBounds[0] === 0 && priceBounds[1] === 0) return;
+    setPriceRange(priceBounds);
+    priceRangeInitializedRef.current = true;
+  }, [priceBounds]);
+
   const filteredProducts = useMemo(() => {
     const activeCategoryIds = CATEGORIES.find(c => c.id === activeCategory)?.categoryIds ?? null;
-    return (allProducts || []).filter(product => {
+    const filtered = (allProducts || []).filter(product => {
       const matchCategory = activeCategory === 'all'
         || (activeCategoryIds != null
             && product.categoryId != null
             && activeCategoryIds.includes(product.categoryId));
       const matchSearch = product.title.toLowerCase().includes(searchQuery.toLowerCase());
-      return matchCategory && matchSearch;
+      const matchColor = selectedColors.size === 0
+        || (product.colors || []).some(c => selectedColors.has(c));
+      // Products with no resolved price yet ("Ціна уточнюється") always pass
+      // the price filter - a price of 0 isn't a comparable number yet.
+      const matchPrice = !priceRange || product.price === 0
+        || (product.price >= priceRange[0] && product.price <= priceRange[1]);
+      return matchCategory && matchSearch && matchColor && matchPrice;
     });
-  }, [activeCategory, searchQuery, allProducts]);
+
+    if (sortOption === 'default') return filtered;
+    // Unresolved-price ("Ціна уточнюється") products always sort last,
+    // regardless of direction - a price of 0 isn't cheapest or priciest.
+    const dir = sortOption === 'price-asc' ? 1 : -1;
+    return filtered.slice().sort((a, b) => {
+      const aHas = a.price > 0, bHas = b.price > 0;
+      if (aHas !== bHas) return aHas ? -1 : 1;
+      if (!aHas) return 0;
+      return dir * (a.price - b.price);
+    });
+  }, [activeCategory, searchQuery, allProducts, selectedColors, priceRange, sortOption]);
 
   const displayedProducts = filteredProducts.slice(0, visibleCount);
 
@@ -740,6 +808,40 @@ export default function App() {
             />
         </div>
 
+        <div className="flex flex-col md:flex-row gap-8 items-start">
+          {/* Desktop filter sidebar */}
+          <aside className="hidden md:block w-64 shrink-0 sticky top-[150px]">
+            <CatalogFilters
+              availableColors={availableColors}
+              selectedColors={selectedColors}
+              onToggleColor={(color) => setSelectedColors(prev => {
+                const next = new Set(prev);
+                if (next.has(color)) next.delete(color); else next.add(color);
+                return next;
+              })}
+              priceBounds={priceBounds}
+              priceRange={priceRange ?? priceBounds}
+              onChangePriceRange={setPriceRange}
+              sortOption={sortOption}
+              onChangeSort={setSortOption}
+              onReset={() => { setSelectedColors(new Set()); setPriceRange(priceBounds); setSortOption('default'); }}
+            />
+          </aside>
+
+          <div className="flex-1 min-w-0">
+            {/* Mobile filters button */}
+            <div className="md:hidden mb-6 flex justify-end">
+              <button
+                onClick={() => setIsFilterSheetOpen(true)}
+                className="flex items-center gap-2 border border-black px-5 py-2 text-xs uppercase tracking-widest hover:bg-black hover:text-white transition-all duration-300"
+              >
+                Фільтри
+                {(selectedColors.size > 0 || (priceRange != null && (priceRange[0] !== priceBounds[0] || priceRange[1] !== priceBounds[1])) || sortOption !== 'default') && (
+                  <span className="w-2 h-2 rounded-full bg-red-600" />
+                )}
+              </button>
+            </div>
+
         {/* Product Grid */}
         {isLoading ? (
           <div className="flex flex-col items-center justify-center py-20 text-gray-500">
@@ -797,7 +899,7 @@ export default function App() {
             <div className="text-center py-20 text-gray-400">
                 <p>Товарів не знайдено :(</p>
                 <button 
-                    onClick={() => { setSearchQuery(''); setActiveCategory('all'); }}
+                    onClick={() => { setSearchQuery(''); setActiveCategory('all'); setSelectedColors(new Set()); setPriceRange(priceBounds); setSortOption('default'); }}
                     className="mt-4 text-black underline text-sm"
                 >
                     Скинути фільтри
@@ -816,8 +918,46 @@ export default function App() {
                 </button>
             </div>
         )}
+          </div>
+        </div>
 
       </main>
+
+      {/* Mobile Filters Bottom Sheet */}
+      {isFilterSheetOpen && (
+        <div className="fixed inset-0 z-50 md:hidden flex items-end">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setIsFilterSheetOpen(false)}></div>
+          <div className="relative bg-white w-full max-h-[85vh] overflow-y-auto rounded-t-2xl p-6 pb-8 shadow-2xl animate-fade-in-up">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="font-serif text-xl">Фільтри</h3>
+              <button onClick={() => setIsFilterSheetOpen(false)} className="p-2 hover:opacity-70 transition-opacity">
+                <XIcon />
+              </button>
+            </div>
+            <CatalogFilters
+              availableColors={availableColors}
+              selectedColors={selectedColors}
+              onToggleColor={(color) => setSelectedColors(prev => {
+                const next = new Set(prev);
+                if (next.has(color)) next.delete(color); else next.add(color);
+                return next;
+              })}
+              priceBounds={priceBounds}
+              priceRange={priceRange ?? priceBounds}
+              onChangePriceRange={setPriceRange}
+              sortOption={sortOption}
+              onChangeSort={setSortOption}
+              onReset={() => { setSelectedColors(new Set()); setPriceRange(priceBounds); setSortOption('default'); }}
+            />
+            <button
+              onClick={() => setIsFilterSheetOpen(false)}
+              className="mt-8 w-full bg-black text-white py-4 uppercase tracking-widest text-xs font-bold hover:bg-gray-800 transition-colors"
+            >
+              Показати {filteredProducts.length} товарів
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Footer */}
       <footer className="bg-black text-white pt-16 pb-8 px-6 mt-12">

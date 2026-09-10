@@ -86,6 +86,52 @@ export async function fetchOffersForProduct(productId: number | string): Promise
   return all.filter(o => !o.is_archived);
 }
 
+// Same /offers endpoint, no product_id filter -> every offer in the shop
+// (paginated, ~39 pages catalog-wide vs 3 for /products). Used to populate
+// sizes/colors for the whole catalog up front (color filter needs every
+// product's colors, not just ones the user has opened) instead of one
+// request per product. onPage lets the caller merge results incrementally
+// as pages arrive rather than waiting for all ~39.
+export async function fetchAllKeycrmOffers(onPage?: (pageOffers: KeycrmOffer[]) => void): Promise<KeycrmOffer[]> {
+  const all: KeycrmOffer[] = [];
+  let page = 1;
+  let lastPage = 1;
+  do {
+    const data = await fetchJson<KeycrmPage<KeycrmOffer>>('/offers', { limit: PAGE_LIMIT, page });
+    const active = data.data.filter(o => !o.is_archived);
+    all.push(...active);
+    onPage?.(active);
+    lastPage = data.last_page;
+    page += 1;
+  } while (page <= lastPage);
+  return all;
+}
+
+// Session-scoped cache for the derived (sizes/colors/variantOffers) result of
+// fetchAllKeycrmOffers, keyed by product id. Storing the derived shape rather
+// than raw offers keeps it tiny (a few KB) and avoids re-running
+// deriveVariants on every catalog visit. sessionStorage (not localStorage) -
+// cleared per tab/session by design, so a schema change never needs manual
+// cache-busting for returning visitors.
+const OFFERS_VARIANTS_CACHE_KEY = 'tvk_offers_variants_cache_v1';
+
+export function readCachedOfferVariants(): Record<string, ProductVariants> | null {
+  try {
+    const raw = sessionStorage.getItem(OFFERS_VARIANTS_CACHE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function writeCachedOfferVariants(map: Record<string, ProductVariants>): void {
+  try {
+    sessionStorage.setItem(OFFERS_VARIANTS_CACHE_KEY, JSON.stringify(map));
+  } catch {
+    // sessionStorage unavailable (private mode / quota) - filter just won't be cached, non-fatal.
+  }
+}
+
 function isWithinDays(dateStr: string, days: number): boolean {
   const created = new Date(dateStr).getTime();
   if (Number.isNaN(created)) return false;
@@ -263,4 +309,21 @@ export function deriveVariants(offers: KeycrmOffer[]): ProductVariants {
   });
 
   return { sizes, colors: Array.from(colorsSet), variantOffers };
+}
+
+// Groups a flat offers list (e.g. from fetchAllKeycrmOffers) by product_id
+// and runs deriveVariants per group - used to populate sizes/colors for the
+// whole catalog at once instead of one deriveVariants call per product.
+export function deriveVariantsByProduct(offers: KeycrmOffer[]): Record<string, ProductVariants> {
+  const byProduct = new Map<number, KeycrmOffer[]>();
+  offers.forEach(offer => {
+    const list = byProduct.get(offer.product_id);
+    if (list) list.push(offer);
+    else byProduct.set(offer.product_id, [offer]);
+  });
+  const result: Record<string, ProductVariants> = {};
+  byProduct.forEach((productOffers, productId) => {
+    result[String(productId)] = deriveVariants(productOffers);
+  });
+  return result;
 }

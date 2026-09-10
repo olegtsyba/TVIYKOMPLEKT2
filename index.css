@@ -34,6 +34,46 @@
   animation: shake 0.3s ease-in-out;
 }
 
+/* Dual-thumb price range slider (two overlapping <input type="range">) -
+   the track is transparent/pointer-events:none via Tailwind's appearance-none
+   + pointer-events-none class, only the thumb itself is interactive. */
+.range-thumb {
+  height: 0;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+}
+.range-thumb::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  pointer-events: auto;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #000;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.2);
+  cursor: pointer;
+  margin-top: -9px;
+}
+.range-thumb::-moz-range-thumb {
+  pointer-events: auto;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #000;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.2);
+  cursor: pointer;
+}
+.range-thumb::-webkit-slider-runnable-track {
+  height: 1px;
+  background: transparent;
+}
+.range-thumb::-moz-range-track {
+  height: 1px;
+  background: transparent;
+}
+
 /* Admin Loader */
 .loader {
   border: 3px solid #f3f3f3;
