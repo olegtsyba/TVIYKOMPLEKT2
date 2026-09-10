@@ -373,6 +373,10 @@ export default function App() {
 
   // Cart Logic
   const addToCart = (product: Product, size: string, color?: string) => {
+    if (!(product.price > 0)) {
+      showToast("❌ Ціна уточнюється, зверніться до менеджера", "error");
+      return;
+    }
     if (product.sizes && product.sizes.length > 0 && !size) {
       showToast("⚠️ Оберіть розмір!", "error");
       setSizeError(true);
@@ -530,6 +534,11 @@ export default function App() {
   const isCurrentSelectionAvailable = selectedProduct
     ? isVariantAvailable(selectedColorForModal, selectedSizeForModal)
     : true;
+
+  // KeyCRM sometimes reports no positive price for any offer of a product
+  // (see getMinOfferPrice in services/keycrm.ts) - price then stays 0.
+  const hasValidPrice = selectedProduct ? selectedProduct.price > 0 : true;
+  const canAddToCart = isCurrentSelectionAvailable && hasValidPrice;
 
   const handleSelectColor = (color: string) => {
     setSelectedColorForModal(color);
@@ -737,10 +746,16 @@ export default function App() {
                             </div>
                             <h3 className="text-xs uppercase tracking-wide text-gray-900 truncate mb-1 pr-2">{product.title}</h3>
                             <div className="flex items-center gap-2">
-                                {product.oldPrice && product.oldPrice > product.price && (
-                                    <span className="text-xs text-gray-400 line-through">{product.oldPrice} UAH</span>
+                                {product.price > 0 ? (
+                                    <>
+                                        {product.oldPrice && product.oldPrice > product.price && (
+                                            <span className="text-xs text-gray-400 line-through">{product.oldPrice} UAH</span>
+                                        )}
+                                        <span className={`text-sm font-semibold ${product.oldPrice ? 'text-red-600' : 'text-gray-900'}`}>{product.price} UAH</span>
+                                    </>
+                                ) : (
+                                    <span className="text-sm font-semibold text-gray-400">Ціна уточнюється</span>
                                 )}
-                                <span className={`text-sm font-semibold ${product.oldPrice ? 'text-red-600' : 'text-gray-900'}`}>{product.price} UAH</span>
                             </div>
                         </div>
                     );
@@ -935,14 +950,20 @@ export default function App() {
                                     <span className="text-xs text-gray-500 font-medium">({selectedProduct.reviews?.length || 0} відгуків)</span>
                                 </div>
                                 <div className="flex items-end gap-3">
-                                     {selectedProduct.oldPrice && selectedProduct.oldPrice > selectedProduct.price && (
-                                        <span className="text-lg text-gray-400 line-through">{selectedProduct.oldPrice} UAH</span>
-                                     )}
-                                    <p className={`text-xl font-bold ${selectedProduct.oldPrice ? 'text-red-600' : 'text-black'}`}>{selectedProduct.price} UAH</p>
-                                    {selectedProduct.oldPrice && selectedProduct.oldPrice > selectedProduct.price && (
-                                        <span className="bg-red-600 text-white text-[10px] font-bold px-2 py-1 uppercase tracking-widest">
-                                            {selectedProduct.badgeText || 'SALE'}
-                                        </span>
+                                    {hasValidPrice ? (
+                                        <>
+                                            {selectedProduct.oldPrice && selectedProduct.oldPrice > selectedProduct.price && (
+                                                <span className="text-lg text-gray-400 line-through">{selectedProduct.oldPrice} UAH</span>
+                                            )}
+                                            <p className={`text-xl font-bold ${selectedProduct.oldPrice ? 'text-red-600' : 'text-black'}`}>{selectedProduct.price} UAH</p>
+                                            {selectedProduct.oldPrice && selectedProduct.oldPrice > selectedProduct.price && (
+                                                <span className="bg-red-600 text-white text-[10px] font-bold px-2 py-1 uppercase tracking-widest">
+                                                    {selectedProduct.badgeText || 'SALE'}
+                                                </span>
+                                            )}
+                                        </>
+                                    ) : (
+                                        <p className="text-xl font-bold text-gray-400">Ціна уточнюється</p>
                                     )}
                                 </div>
                             </div>
@@ -1086,14 +1107,14 @@ export default function App() {
                             {/* Buy Button */}
                             <button
                                 onClick={() => addToCart(selectedProduct, selectedSizeForModal, selectedColorForModal)}
-                                disabled={!isCurrentSelectionAvailable}
+                                disabled={!canAddToCart}
                                 className={`w-full py-4 uppercase tracking-widest text-sm font-bold transition-colors shadow-lg mb-6 ${
-                                    isCurrentSelectionAvailable
+                                    canAddToCart
                                     ? 'bg-black text-white hover:bg-gray-800'
                                     : 'bg-gray-200 text-gray-400 cursor-not-allowed'
                                 }`}
                             >
-                                Додати в кошик
+                                {hasValidPrice ? 'Додати в кошик' : 'Ціна уточнюється'}
                             </button>
 
                             {/* Video Accordion */}

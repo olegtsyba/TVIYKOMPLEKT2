@@ -1,20 +1,37 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# TVIYKOMPLEKT
 
-# Run and deploy your AI Studio app
+Інтернет-вітрина TVIYKOMPLEKT — каталог і лід-форма замовлення поверх KeyCRM.
+Каталог (товари, розміри, кольори, наявність) підтягується напряму з KeyCRM,
+оформлення замовлення надсилає сповіщення менеджеру в Telegram (оплата й
+підтвердження — вручну, без інтеграції з платіжною системою).
 
-This contains everything you need to run your app locally.
+## Стек
 
-View your app in AI Studio: https://ai.studio/apps/drive/1XXxDeq3cb2x6Js4lDSbPryd-Yoq-sRBM
+- React + TypeScript + Vite
+- Tailwind CSS
+- Firebase (Hosting, Firestore, Cloud Functions, Storage)
 
-## Run Locally
+## Локальний запуск
 
-**Prerequisites:**  Node.js
+```bash
+npm install
+npm run dev
+```
 
+Адмін-панель (`admin.html`) відкривається окремо — вона не збирається Vite,
+а копіюється в `dist/` при білді.
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+## Деплой
+
+```bash
+npm run build
+firebase deploy
+```
+
+Щоб задеплоїти лише частину проєкту:
+
+```bash
+firebase deploy --only hosting
+firebase deploy --only firestore:rules,storage
+firebase deploy --only functions
+```
