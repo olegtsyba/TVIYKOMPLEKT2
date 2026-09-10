@@ -37,7 +37,7 @@
 <body class="bg-gray-100 text-gray-800 antialiased min-h-screen pb-20">
 
     <!-- Notification Toast -->
-    <div id="toast" class="fixed top-5 right-5 z-[60] transform translate-x-full transition-transform duration-300">
+    <div id="toast" class="fixed top-5 right-5 z-[60] transform translate-x-[calc(100%+1.25rem)] transition-transform duration-300">
         <div class="bg-black text-white px-6 py-4 shadow-lg rounded flex items-center gap-3">
             <i class="fas fa-info-circle"></i>
             <span id="toast-msg" class="font-medium text-sm uppercase tracking-wide">Message</span>
@@ -577,8 +577,8 @@
             const wrapper = toast.firstElementChild;
             toastMsg.innerText = msg;
             wrapper.className = `px-6 py-4 shadow-lg rounded flex items-center gap-3 ${isError ? 'bg-red-600 text-white' : 'bg-black text-white'}`;
-            toast.classList.remove('translate-x-full');
-            setTimeout(() => toast.classList.add('translate-x-full'), 3000);
+            toast.classList.remove('translate-x-[calc(100%+1.25rem)]');
+            setTimeout(() => toast.classList.add('translate-x-[calc(100%+1.25rem)]'), 3000);
         };
 
         const toggleLoading = (btnId, isLoading, text) => {

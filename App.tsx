@@ -141,6 +141,24 @@ export default function App() {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const searchContainerRef = useRef<HTMLDivElement>(null);
   const variantsLoadedRef = useRef<Set<string>>(new Set());
+  const categoryScrollRef = useRef<HTMLDivElement>(null);
+  const [showCategoryScrollHint, setShowCategoryScrollHint] = useState(false);
+
+  // Category bar horizontal-scroll hint (mobile): show a fade on the right
+  // edge while there's more to scroll, hide it once scrolled to the end.
+  const updateCategoryScrollHint = () => {
+    const el = categoryScrollRef.current;
+    if (!el) return;
+    const isOverflowing = el.scrollWidth > el.clientWidth + 1;
+    const atEnd = el.scrollLeft + el.clientWidth >= el.scrollWidth - 1;
+    setShowCategoryScrollHint(isOverflowing && !atEnd);
+  };
+
+  useEffect(() => {
+    updateCategoryScrollHint();
+    window.addEventListener('resize', updateCategoryScrollHint);
+    return () => window.removeEventListener('resize', updateCategoryScrollHint);
+  }, []);
 
   // Fetch Data Effect
   useEffect(() => {
@@ -607,8 +625,8 @@ export default function App() {
                  <input 
                   ref={searchInputRef}
                   type="text" 
-                  placeholder="Я шукаю..." 
-                  className="w-full p-2 text-sm border-b border-gray-200 outline-none focus:border-black transition-colors bg-transparent"
+                  placeholder="Я шукаю..."
+                  className="w-full p-2 text-base border-b border-gray-200 outline-none focus:border-black transition-colors bg-transparent"
                   value={searchQuery}
                   onChange={(e) => {
                     setSearchQuery(e.target.value);
@@ -687,25 +705,39 @@ export default function App() {
       <main id="catalog" className="flex-grow container mx-auto px-4 py-12">
         
         {/* Categories */}
-        <div className="sticky top-[70px] z-30 bg-white/90 backdrop-blur-sm py-4 mb-8 border-b border-gray-100 overflow-x-auto no-scrollbar">
-            <div className="flex justify-start md:justify-center gap-4 min-w-max px-4">
-                {CATEGORIES.map(cat => (
-                    <button
-                        key={cat.id}
-                        onClick={() => {
-                            setActiveCategory(cat.id);
-                            setVisibleCount(8);
-                        }}
-                        className={`text-xs uppercase tracking-widest px-4 py-2 transition-all duration-300 ${
-                            activeCategory === cat.id 
-                            ? 'text-black border-b-2 border-black font-semibold' 
-                            : 'text-gray-500 hover:text-black'
-                        }`}
-                    >
-                        {cat.label}
-                    </button>
-                ))}
+        <div className="sticky top-[70px] z-30 relative mb-8">
+            <div
+                ref={categoryScrollRef}
+                onScroll={updateCategoryScrollHint}
+                className="bg-white/90 backdrop-blur-sm py-4 border-b border-gray-100 overflow-x-auto no-scrollbar"
+            >
+                <div className="flex justify-start md:justify-center gap-4 min-w-max px-4">
+                    {CATEGORIES.map(cat => (
+                        <button
+                            key={cat.id}
+                            onClick={() => {
+                                setActiveCategory(cat.id);
+                                setVisibleCount(8);
+                            }}
+                            className={`text-xs uppercase tracking-widest px-4 py-2 transition-all duration-300 ${
+                                activeCategory === cat.id
+                                ? 'text-black border-b-2 border-black font-semibold'
+                                : 'text-gray-500 hover:text-black'
+                            }`}
+                        >
+                            {cat.label}
+                        </button>
+                    ))}
+                </div>
             </div>
+            {/* Fade hint that there's more to scroll horizontally - a sibling of
+                the scrolling element (not a descendant), so it stays pinned to
+                the edge regardless of scrollLeft. Fades out at the end. */}
+            <div
+                className={`pointer-events-none absolute top-0 right-0 bottom-0 w-10 bg-gradient-to-l from-white to-transparent transition-opacity duration-300 ${
+                    showCategoryScrollHint ? 'opacity-100' : 'opacity-0'
+                }`}
+            />
         </div>
 
         {/* Product Grid */}
@@ -985,16 +1017,20 @@ export default function App() {
                                                 <button
                                                     key={color}
                                                     onClick={() => handleSelectColor(color)}
-                                                    className={`w-8 h-8 rounded-full border transition-all duration-200 ${
-                                                        selectedColorForModal === color
-                                                        ? 'ring-2 ring-offset-2 ring-black scale-110 shadow-sm'
-                                                        : 'hover:scale-110 hover:shadow-sm'
-                                                    } ${hex ? 'border-gray-200' : 'border-gray-300 bg-gray-100 flex items-center justify-center'}`}
-                                                    style={hex ? { backgroundColor: hex } : undefined}
+                                                    className="group w-11 h-11 flex items-center justify-center"
                                                     title={color}
                                                     aria-label={color}
                                                 >
-                                                    {!hex && <span className="text-[8px] text-gray-500">?</span>}
+                                                    <span
+                                                        className={`w-8 h-8 rounded-full border transition-all duration-200 flex items-center justify-center ${
+                                                            selectedColorForModal === color
+                                                            ? 'ring-2 ring-offset-2 ring-black scale-110 shadow-sm'
+                                                            : 'group-hover:scale-110 group-hover:shadow-sm'
+                                                        } ${hex ? 'border-gray-200' : 'border-gray-300 bg-gray-100'}`}
+                                                        style={hex ? { backgroundColor: hex } : undefined}
+                                                    >
+                                                        {!hex && <span className="text-[8px] text-gray-500">?</span>}
+                                                    </span>
                                                 </button>
                                             );
                                         })}
@@ -1362,7 +1398,7 @@ export default function App() {
                                         <input 
                                             type="text" 
                                             placeholder="Ім'я" 
-                                            className={`w-full border-b py-2 text-sm outline-none bg-transparent ${formErrors.firstName ? 'border-red-500 placeholder-red-400' : 'border-gray-300'}`} 
+                                            className={`w-full border-b py-2 text-base outline-none bg-transparent focus:border-black transition-colors ${formErrors.firstName ? 'border-red-500 placeholder-red-400' : 'border-gray-300'}`} 
                                             value={orderForm.firstName} 
                                             onChange={(e) => handleInputChange('firstName', e.target.value)}
                                         />
@@ -1371,7 +1407,7 @@ export default function App() {
                                         <input 
                                             type="text" 
                                             placeholder="Прізвище" 
-                                            className={`w-full border-b py-2 text-sm outline-none bg-transparent ${formErrors.lastName ? 'border-red-500 placeholder-red-400' : 'border-gray-300'}`} 
+                                            className={`w-full border-b py-2 text-base outline-none bg-transparent focus:border-black transition-colors ${formErrors.lastName ? 'border-red-500 placeholder-red-400' : 'border-gray-300'}`} 
                                             value={orderForm.lastName} 
                                             onChange={(e) => handleInputChange('lastName', e.target.value)}
                                         />
@@ -1380,7 +1416,7 @@ export default function App() {
                                 <input 
                                     type="tel" 
                                     placeholder="+380 (XX) XXX-XX-XX" 
-                                    className={`w-full border-b py-2 text-sm outline-none bg-transparent ${formErrors.phone ? 'border-red-500 placeholder-red-400' : 'border-gray-300'}`} 
+                                    className={`w-full border-b py-2 text-base outline-none bg-transparent focus:border-black transition-colors ${formErrors.phone ? 'border-red-500 placeholder-red-400' : 'border-gray-300'}`} 
                                     value={orderForm.phone} 
                                     onChange={handlePhoneChange}
                                 />
@@ -1388,14 +1424,14 @@ export default function App() {
                                     <input 
                                         type="text" 
                                         placeholder="Місто / Населений пункт" 
-                                        className={`w-full border-b py-2 text-sm outline-none bg-transparent ${formErrors.city ? 'border-red-500 placeholder-red-400' : 'border-gray-300'}`} 
+                                        className={`w-full border-b py-2 text-base outline-none bg-transparent focus:border-black transition-colors ${formErrors.city ? 'border-red-500 placeholder-red-400' : 'border-gray-300'}`} 
                                         value={orderForm.city} 
                                         onChange={(e) => handleInputChange('city', e.target.value)}
                                     />
                                     <input 
                                         type="text" 
                                         placeholder="Відділення Нової Пошти або Поштомат НП" 
-                                        className={`w-full border-b py-2 text-sm outline-none bg-transparent ${formErrors.branch ? 'border-red-500 placeholder-red-400' : 'border-gray-300'}`} 
+                                        className={`w-full border-b py-2 text-base outline-none bg-transparent focus:border-black transition-colors ${formErrors.branch ? 'border-red-500 placeholder-red-400' : 'border-gray-300'}`} 
                                         value={orderForm.branch} 
                                         onChange={(e) => handleInputChange('branch', e.target.value)}
                                     />
