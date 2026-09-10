@@ -40,6 +40,15 @@ service cloud.firestore {
       allow write: if request.auth != null;
     }
 
+    // Manually-entered customer reviews, keyed by KeyCRM product id
+    // (admin.html product modal - "Відгуки клієнтів"). Read publicly by the
+    // storefront (App.tsx) to render on the product page; only admin.html
+    // writes. Same pattern as productMedia above.
+    match /productReviews/{productId} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+
     // Everything else stays locked down.
     match /{document=**} {
       allow read, write: if false;

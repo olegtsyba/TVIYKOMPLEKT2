@@ -7,6 +7,7 @@ import { db } from './firebase';
 import { fetchAllKeycrmProducts, fetchOffersForProduct, mapKeycrmProduct, deriveVariants, getMinOfferPrice } from './services/keycrm';
 import { fetchActivePromotions, applyPromotion } from './services/promotions';
 import { fetchProductMediaMap, applyProductMedia } from './services/productMedia';
+import { fetchProductReviewsMap, applyProductReviews } from './services/productReviews';
 
 // Icons using SVG components
 const SearchIcon = () => (
@@ -39,6 +40,9 @@ const ChevronUpIcon = () => (
 const PlayIcon = () => (
   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
 );
+const InstagramIcon = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line></svg>
+);
 const StarIcon = ({ filled }: { filled: boolean }) => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill={filled ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={filled ? "text-yellow-500" : "text-gray-300"}><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
 );
@@ -48,10 +52,41 @@ const ZoomInIcon = () => (
 
 const DEFAULT_SETTINGS: SiteSettings = {
   heroTitle: "NEW\nCOLLECTION",
-  heroSubtitle: "Весна - Літо 2025",
-  heroBackgroundUrl: "https://images.unsplash.com/photo-1483985988355-763728e1935b?q=80&w=2070&auto=format&fit=crop",
+  heroSubtitle: "НОВА КОЛЕКЦІЯ",
+  heroBackgroundUrl: "https://tviykomplekt.api.keycrm.app/file-storage/thumbnails/tviykomplekt/uploads/2025-09-01/8gUL58c0AhNLObGJdAyB9n7nNoTtvdjV.jpeg",
   logoText: "TVIYKOMPLEKT",
   heroDescription: "Естетика. Комфорт. Впевненість. Одяг, який підкреслює твою індивідуальність."
+};
+
+type FooterInfoKey = 'delivery' | 'returns' | 'sizing';
+
+const FOOTER_INFO_CONTENT: Record<FooterInfoKey, { title: string; paragraphs: string[] }> = {
+  delivery: {
+    title: 'Доставка та оплата',
+    paragraphs: [
+      'Безкоштовна доставка при замовленні від 2500 грн (100% передоплата). Не сумується з іншими акціями та спеціальними пропозиціями.',
+    ],
+  },
+  returns: {
+    title: 'Обмін та повернення',
+    paragraphs: [
+      'Обмін/повернення здійснюється протягом 14 днів з моменту отримання посилки.',
+      'Якщо замовлення оформлене післяплатою, на Новій пошті, на жаль, неможливо оплатити лише частину замовлення — посилка оплачується повністю. Якщо одна з позицій не підійшла — ви можете оформити безкоштовний обмін, або повернення протягом 14 днів. Просто напишіть нам, і ми швидко допоможемо з усім процесом.',
+      'Обмін/повернення можливий тільки в тому разі, якщо річ у використанні не була, збережене оригінальне пакування, охайний вигляд, не має сторонніх запахів, слідів дезодоранту пилу та шерсті.',
+      'Якщо посилка не була отримана на Новій пошті (відмова/не підійшов розмір/зміна моделі), це не вважається обміном, оскільки замовлення не було завершене. У такому випадку оформлюється нове замовлення, а передоплата покриває витрати на доставку та обробку.',
+      'Якщо повернення, або обмін здійснюється з вини нашого магазину (наприклад, товар не відповідає замовленню, або бракований товар), доставку оплачуємо ми. В інших випадках вартість доставки оплачує покупець.',
+      'Претензії стосовно браку приймаються тільки тоді, коли вони виявлені на пошті. В такому випадку потрібно зробити відмову і повідомити нас про це, щоб ми відправили вам заміну. На замовлення відправлені через поштомат претензії не розглядаються (через відсутність камер та можливості огляду).',
+      'Повернення коштів здійснюється протягом 7 робочих днів.',
+    ],
+  },
+  sizing: {
+    title: 'Таблиця розмірів',
+    paragraphs: [
+      'ОГ (обхват грудей) — виміряйте стрічкою горизонтально по найвищих точках грудей.',
+      'ОТ (обхват талії) — по найвужчій частині талії, зазвичай на 2-3 см вище пупка.',
+      'ОС (обхват стегон) — по найширшій частині стегон і сідниць.',
+    ],
+  },
 };
 
 interface LightboxItem {
@@ -99,6 +134,9 @@ export default function App() {
   const [lightboxItems, setLightboxItems] = useState<LightboxItem[]>([]);
   const [lightboxIndex, setLightboxIndex] = useState(0);
 
+  // Footer info modal (Доставка / Обмін / Таблиця розмірів)
+  const [activeInfoModal, setActiveInfoModal] = useState<FooterInfoKey | null>(null);
+
   // References
   const searchInputRef = useRef<HTMLInputElement>(null);
   const searchContainerRef = useRef<HTMLDivElement>(null);
@@ -132,10 +170,11 @@ export default function App() {
 
         // 2. Fetch Products from KeyCRM (catalog) + Firestore (point discounts)
         try {
-          const [kcProducts, promotions, productMedia] = await Promise.all([
+          const [kcProducts, promotions, productMedia, productReviews] = await Promise.all([
             fetchAllKeycrmProducts(),
             fetchActivePromotions(),
             fetchProductMediaMap(),
+            fetchProductReviewsMap(),
           ]);
 
           const products = kcProducts
@@ -147,7 +186,7 @@ export default function App() {
           // products report min_price=0 on the list endpoint even though their
           // offers carry real prices — those get patched in the background
           // below so the first paint isn't blocked on extra requests.
-          setAllProducts(products.map(p => applyProductMedia(applyPromotion(p, promotions.get(String(p.id))), productMedia.get(String(p.id)))));
+          setAllProducts(products.map(p => applyProductReviews(applyProductMedia(applyPromotion(p, promotions.get(String(p.id))), productMedia.get(String(p.id))), productReviews.get(String(p.id)))));
 
           const zeroPriceProducts = products.filter(p => p.price === 0);
           if (zeroPriceProducts.length > 0) {
@@ -604,9 +643,10 @@ export default function App() {
         <div className="absolute inset-0 z-0">
             {/* Background Image with Fallback */}
             <img 
-                src={siteSettings.heroBackgroundUrl || DEFAULT_SETTINGS.heroBackgroundUrl} 
-                alt="Hero Background" 
+                src={siteSettings.heroBackgroundUrl || DEFAULT_SETTINGS.heroBackgroundUrl}
+                alt="Hero Background"
                 className="w-full h-full object-cover opacity-80"
+                style={{ objectPosition: '50% 65%' }}
             />
             <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent"></div>
         </div>
@@ -615,7 +655,7 @@ export default function App() {
             <div className="backdrop-blur-md bg-white/10 p-8 md:p-12 border border-white/20 shadow-2xl">
                 {/* STATIC CLASSES, DYNAMIC CONTENT */}
                 <span className="block text-xs md:text-sm tracking-[0.3em] text-white/90 mb-4 uppercase">
-                    {siteSettings.heroSubtitle || "Весна - Літо 2025"}
+                    {siteSettings.heroSubtitle || "НОВА КОЛЕКЦІЯ"}
                 </span>
                 <h1 className="font-serif text-4xl md:text-6xl text-white font-bold mb-6 leading-tight whitespace-pre-line">
                     {siteSettings.heroTitle || "NEW\nCOLLECTION"}
@@ -734,42 +774,62 @@ export default function App() {
 
       {/* Footer */}
       <footer className="bg-black text-white pt-16 pb-8 px-6 mt-12">
-        <div className="container mx-auto grid grid-cols-1 md:grid-cols-4 gap-12 border-b border-gray-800 pb-12">
+        <div className="container mx-auto grid grid-cols-1 md:grid-cols-3 gap-12 border-b border-gray-800 pb-12">
             <div>
                 <h3 className="font-serif text-2xl mb-6">{siteSettings.logoText}</h3>
                 <p className="text-gray-400 text-sm leading-relaxed mb-6">
                     Створюємо одяг, який підкреслює твою індивідуальність. Якість у кожному шві.
                 </p>
             </div>
-            {/* Footer Links (Static) */}
+            {/* Footer Links (open the info modal below instead of navigating) */}
             <div>
                 <h4 className="font-bold text-sm uppercase tracking-widest mb-6">Клієнтам</h4>
                 <ul className="space-y-3 text-sm text-gray-400">
-                    <li><a href="#" className="hover:text-white transition-colors">Доставка та оплата</a></li>
-                    <li><a href="#" className="hover:text-white transition-colors">Обмін та повернення</a></li>
-                    <li><a href="#" className="hover:text-white transition-colors">Таблиця розмірів</a></li>
+                    <li><a href="#" onClick={(e) => { e.preventDefault(); setActiveInfoModal('delivery'); }} className="hover:text-white transition-colors">Доставка та оплата</a></li>
+                    <li><a href="#" onClick={(e) => { e.preventDefault(); setActiveInfoModal('returns'); }} className="hover:text-white transition-colors">Обмін та повернення</a></li>
+                    <li><a href="#" onClick={(e) => { e.preventDefault(); setActiveInfoModal('sizing'); }} className="hover:text-white transition-colors">Таблиця розмірів</a></li>
                 </ul>
             </div>
             <div>
                 <h4 className="font-bold text-sm uppercase tracking-widest mb-6">Контакти</h4>
-                <div className="text-sm text-gray-400 space-y-2">
-                    <p>+38 (097) 000-00-00</p>
-                    <p>mon-fri: 10:00 - 19:00</p>
-                    <p>myshop@gmail.com</p>
-                </div>
-            </div>
-            <div>
-                 <h4 className="font-bold text-sm uppercase tracking-widest mb-6">Newsletter</h4>
-                 <div className="flex border-b border-gray-600 pb-2">
-                    <input type="email" placeholder="Ваш Email" className="bg-transparent w-full outline-none text-sm placeholder-gray-500"/>
-                    <button className="text-white hover:text-gray-300"><ArrowRightIcon /></button>
-                 </div>
+                <p className="text-sm text-gray-400 mb-3">Зв'яжіться з нами в Instagram</p>
+                <a
+                    href="https://www.instagram.com/tviykomplekt/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 text-sm text-white hover:text-gray-300 transition-colors"
+                >
+                    <InstagramIcon /> @tviykomplekt
+                </a>
             </div>
         </div>
         <div className="text-center pt-8 text-xs text-gray-600">
-            &copy; 2025 {siteSettings.logoText}. Всі права захищено.
+            &copy; {new Date().getFullYear()} {siteSettings.logoText}. Всі права захищено.
         </div>
       </footer>
+
+      {/* Footer Info Modal (Доставка / Обмін / Таблиця розмірів) */}
+      {activeInfoModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setActiveInfoModal(null)}></div>
+            <div className="relative bg-white w-full max-w-lg max-h-[85vh] rounded-sm overflow-hidden flex flex-col shadow-2xl animate-fade-in-up">
+                <button
+                    onClick={() => setActiveInfoModal(null)}
+                    className="absolute top-4 right-4 z-50 p-2 bg-white/80 rounded-full hover:bg-white shadow-sm"
+                >
+                    <XIcon />
+                </button>
+                <div className="flex-1 overflow-y-auto p-8 md:p-10">
+                    <h2 className="font-serif text-2xl mb-6">{FOOTER_INFO_CONTENT[activeInfoModal].title}</h2>
+                    <div className="space-y-4">
+                        {FOOTER_INFO_CONTENT[activeInfoModal].paragraphs.map((paragraph, idx) => (
+                            <p key={idx} className="text-sm text-gray-700 leading-relaxed">{paragraph}</p>
+                        ))}
+                    </div>
+                </div>
+            </div>
+        </div>
+      )}
 
       {/* Scroll To Top Button */}
       <button 
@@ -1092,7 +1152,10 @@ export default function App() {
                                        {selectedProduct.reviews.map((review, i) => (
                                           <div key={i} className="bg-gray-50 p-4 rounded-sm border border-gray-100">
                                               <div className="flex justify-between items-start mb-2">
-                                                 <span className="font-bold text-sm">{review.user}</span>
+                                                 <div>
+                                                    <span className="font-bold text-sm">{review.user}</span>
+                                                    {review.date && <span className="text-gray-400 text-xs ml-2">{review.date}</span>}
+                                                 </div>
                                                  <div className="flex text-yellow-500 text-xs">
                                                     {'★'.repeat(review.rating)}{'☆'.repeat(5-review.rating)}
                                                  </div>

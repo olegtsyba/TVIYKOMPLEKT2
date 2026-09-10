@@ -238,27 +238,6 @@
                     <div id="imagePreviewContainer" class="grid grid-cols-4 md:grid-cols-6 gap-2 mt-4"></div>
                 </div>
 
-                <!-- REVIEWS MANAGEMENT -->
-                <div class="mt-8 border-t border-gray-100 pt-6">
-                     <h3 class="text-xs font-bold uppercase text-gray-500 mb-4">Відгуки клієнтів</h3>
-                     <div id="reviewsList" class="space-y-3 mb-4"></div>
-                     <div class="bg-gray-50 p-4 rounded border border-gray-200">
-                         <div class="grid grid-cols-2 gap-3 mb-2">
-                             <input type="text" id="reviewUser" placeholder="Ім'я клієнта" class="text-xs p-2 border rounded">
-                             <select id="reviewRating" class="text-xs p-2 border rounded">
-                                 <option value="5">★★★★★ (5)</option>
-                                 <option value="4">★★★★ (4)</option>
-                                 <option value="3">★★★ (3)</option>
-                             </select>
-                         </div>
-                         <textarea id="reviewText" placeholder="Текст відгуку" class="w-full text-xs p-2 border rounded mb-2 h-16"></textarea>
-                         <div class="flex items-center gap-2">
-                            <input type="file" id="reviewImage" accept="image/*" class="text-xs w-full">
-                            <button type="button" id="addReviewBtn" class="bg-gray-800 text-white px-4 py-2 text-xs uppercase font-bold rounded hover:bg-black whitespace-nowrap flex items-center">Додати відгук</button>
-                         </div>
-                     </div>
-                </div>
-                
                 <div class="mt-8">
                      <button type="submit" id="submitBtn" class="w-full bg-black text-white py-4 text-sm font-bold uppercase tracking-widest hover:bg-gray-900 transition shadow-xl rounded-sm flex justify-center items-center gap-2">
                         <span>Зберегти товар</span>
@@ -419,6 +398,32 @@
                     <p class="text-sm text-gray-500" id="modalVideoUploadLabel">Натисніть або перетягніть відео для завантаження (до 200 МБ)</p>
                 </div>
             </div>
+
+            <div class="p-6 border-t border-gray-200">
+                <h3 class="text-xs font-bold uppercase text-gray-500 mb-1">Відгуки клієнтів</h3>
+                <p class="text-xs text-gray-400 mb-3">Вводяться вручну (напр. відгук, надісланий клієнтом у Telegram). Показуються на сторінці товару на сайті.</p>
+                <div id="modalReviewsList" class="space-y-2 mb-4">
+                    <p class="text-xs text-gray-400 italic">Завантаження...</p>
+                </div>
+                <div class="bg-gray-50 p-4 rounded border border-gray-200">
+                    <div class="grid grid-cols-2 gap-3 mb-2">
+                        <input type="text" id="modalReviewUser" placeholder="Ім'я клієнта" class="text-xs p-2 border rounded">
+                        <select id="modalReviewRating" class="text-xs p-2 border rounded">
+                            <option value="5">★★★★★ (5)</option>
+                            <option value="4">★★★★ (4)</option>
+                            <option value="3">★★★ (3)</option>
+                            <option value="2">★★ (2)</option>
+                            <option value="1">★ (1)</option>
+                        </select>
+                    </div>
+                    <div class="grid grid-cols-2 gap-3 mb-2">
+                        <input type="date" id="modalReviewDate" class="text-xs p-2 border rounded">
+                        <input type="file" id="modalReviewFile" accept="image/*,video/mp4,video/quicktime,video/webm" class="text-xs w-full">
+                    </div>
+                    <textarea id="modalReviewText" placeholder="Текст відгуку" class="w-full text-xs p-2 border rounded mb-2 h-16"></textarea>
+                    <button type="button" id="modalAddReviewBtn" class="w-full bg-gray-800 text-white px-4 py-2 text-xs uppercase font-bold rounded hover:bg-black flex justify-center items-center">Додати відгук</button>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -547,8 +552,7 @@
         // STATE
         let editingProductId = null;
         let selectedFiles = [];
-        let existingImageUrls = []; 
-        let currentReviews = []; 
+        let existingImageUrls = [];
         let currentSizeChartRows = []; // Array of {size, bust, waist, hips}
         let allProducts = [];
         let hasInitialized = false;
@@ -561,7 +565,9 @@
         let currentModalProductId = null;
         let currentModalPhotos = [];
         let currentModalVideos = [];
+        let currentModalReviews = [];
         let productMediaUnsubscribe = null;
+        let productReviewsUnsubscribe = null;
         const MAX_VIDEO_SIZE_BYTES = 200 * 1024 * 1024;
 
         // UI HELPERS
@@ -752,74 +758,6 @@
         window.removeExistingImage = (idx) => { existingImageUrls.splice(idx, 1); renderPreviews(); };
         window.removeNewFile = (idx) => { selectedFiles.splice(idx, 1); renderPreviews(); };
 
-        // --- 4. REVIEWS LOGIC ---
-
-        const renderReviewsList = () => {
-            const container = document.getElementById('reviewsList');
-            container.innerHTML = '';
-            
-            if (currentReviews.length === 0) {
-                container.innerHTML = '<p class="text-xs text-gray-400 italic">Немає відгуків</p>';
-                return;
-            }
-
-            currentReviews.forEach((review, idx) => {
-                const div = document.createElement('div');
-                div.className = "bg-gray-50 border border-gray-200 p-2 rounded flex justify-between items-start";
-                div.innerHTML = `
-                    <div class="text-xs">
-                        <div class="font-bold">${review.user} <span class="text-yellow-500 ml-1">★ ${review.rating}</span></div>
-                        <p class="text-gray-600 truncate max-w-xs">"${review.text}"</p>
-                        ${review.url ? `<a href="${review.url}" target="_blank" class="text-blue-500 underline">[Фото]</a>` : ''}
-                    </div>
-                    <button type="button" onclick="window.removeReview(${idx})" class="text-red-500 hover:text-red-700 text-xs font-bold">×</button>
-                `;
-                container.appendChild(div);
-            });
-        };
-
-        document.getElementById('addReviewBtn').addEventListener('click', async () => {
-            const user = document.getElementById('reviewUser').value;
-            const rating = parseInt(document.getElementById('reviewRating').value);
-            const text = document.getElementById('reviewText').value;
-            const fileInput = document.getElementById('reviewImage');
-            const file = fileInput.files[0];
-
-            if (!user || !text) {
-                showToast("Заповніть ім'я та текст", true);
-                return;
-            }
-
-            toggleLoading('addReviewBtn', true, 'Додавання');
-
-            let url = null;
-            if (file) {
-                try {
-                    const storageRef = ref(storage, `reviews/${Date.now()}_${file.name}`);
-                    await uploadBytes(storageRef, file);
-                    url = await getDownloadURL(storageRef);
-                } catch (e) {
-                    console.error(e);
-                    showToast("Помилка фото", true);
-                }
-            }
-
-            currentReviews.push({ user, rating, text, type: url ? 'image' : null, url });
-            
-            // Reset fields
-            document.getElementById('reviewUser').value = '';
-            document.getElementById('reviewText').value = '';
-            document.getElementById('reviewRating').value = '5';
-            fileInput.value = '';
-            
-            renderReviewsList();
-            toggleLoading('addReviewBtn', false, 'Додати відгук');
-        });
-
-        window.removeReview = (idx) => {
-            currentReviews.splice(idx, 1);
-            renderReviewsList();
-        };
 
         // --- 5. DATA FETCHING ---
 
@@ -969,7 +907,6 @@
                     videoId: document.getElementById('videoId').value || null,
                     sizes: Array.from(document.querySelectorAll('input[name="sizes"]:checked')).map(cb => cb.value),
                     images: finalImages,
-                    reviews: currentReviews,
                     sizeChart: currentSizeChartRows, // NEW: Array of objects
                     updatedAt: serverTimestamp()
                 };
@@ -1017,7 +954,6 @@
             // Populate State
             existingImageUrls = productToEdit.images || [];
             selectedFiles = [];
-            currentReviews = productToEdit.reviews || [];
             currentSizeChartRows = Array.isArray(productToEdit.sizeChart) ? productToEdit.sizeChart : [];
 
             // UI Update
@@ -1039,7 +975,6 @@
             });
 
             renderPreviews();
-            renderReviewsList();
             renderSizeChartTable();
             window.scrollTo({ top: 300, behavior: 'smooth' });
         };
@@ -1060,14 +995,12 @@
             editingProductId = null;
             selectedFiles = [];
             existingImageUrls = [];
-            currentReviews = [];
             currentSizeChartRows = [];
             document.getElementById('productForm').reset();
             document.getElementById('formTitle').innerText = "Додати новий товар";
             document.getElementById('submitBtn').innerText = "Зберегти товар";
             document.getElementById('resetFormBtn').classList.add('hidden');
             renderPreviews();
-            renderReviewsList();
             renderSizeChartTable();
         };
 
@@ -1289,6 +1222,120 @@
             });
         };
 
+        const escapeHtml = (str) => String(str ?? '').replace(/[&<>"']/g, (c) => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        }[c]));
+
+        const renderModalReviews = () => {
+            const container = document.getElementById('modalReviewsList');
+            container.innerHTML = '';
+
+            if (currentModalReviews.length === 0) {
+                container.innerHTML = '<p class="text-xs text-gray-400 italic">Відгуків ще немає</p>';
+                return;
+            }
+
+            currentModalReviews.forEach((review, idx) => {
+                const div = document.createElement('div');
+                div.className = "bg-gray-50 border border-gray-200 p-2 rounded flex justify-between items-start gap-2";
+                div.innerHTML = `
+                    <div class="text-xs min-w-0">
+                        <div class="font-bold">
+                            ${escapeHtml(review.user)}
+                            <span class="text-yellow-500 ml-1">${'★'.repeat(review.rating)}${'☆'.repeat(5 - review.rating)}</span>
+                            ${review.date ? `<span class="text-gray-400 ml-1">${escapeHtml(review.date)}</span>` : ''}
+                        </div>
+                        <p class="text-gray-600 truncate max-w-xs">"${escapeHtml(review.text)}"</p>
+                        ${review.url ? `<a href="${review.url}" target="_blank" class="text-blue-500 underline">${review.type === 'video' ? '[Відео]' : '[Фото]'}</a>` : ''}
+                    </div>
+                    <button type="button" onclick="window.deleteModalReview(${idx})" class="text-red-500 hover:text-red-700 text-xs font-bold flex-shrink-0">×</button>
+                `;
+                container.appendChild(div);
+            });
+        };
+
+        window.deleteModalReview = async (idx) => {
+            const review = currentModalReviews[idx];
+            if (!review || !currentModalProductId) return;
+            if (!confirm("Видалити цей відгук?")) return;
+
+            if (review.storagePath) {
+                try {
+                    await deleteObject(ref(storage, review.storagePath));
+                } catch (err) {
+                    console.warn("Storage file already missing or failed to delete", err);
+                }
+            }
+
+            const updatedReviews = currentModalReviews.filter((_, i) => i !== idx);
+            try {
+                await setDoc(doc(db, 'productReviews', String(currentModalProductId)), { reviews: updatedReviews }, { merge: true });
+                showToast("🗑 Відгук видалено");
+            } catch (err) {
+                console.error(err);
+                showToast("Помилка видалення відгуку", true);
+            }
+        };
+
+        document.getElementById('modalAddReviewBtn').addEventListener('click', async () => {
+            if (!currentModalProductId) return;
+
+            const user = document.getElementById('modalReviewUser').value.trim();
+            const rating = parseInt(document.getElementById('modalReviewRating').value);
+            const text = document.getElementById('modalReviewText').value.trim();
+            const date = document.getElementById('modalReviewDate').value || null;
+            const fileInput = document.getElementById('modalReviewFile');
+            const file = fileInput.files[0];
+
+            if (!user || !text) {
+                showToast("Заповніть ім'я та текст", true);
+                return;
+            }
+
+            if (file && file.type.startsWith('video/') && file.size > MAX_VIDEO_SIZE_BYTES) {
+                showToast(`Файл "${file.name}" перевищує ліміт 200 МБ`, true);
+                return;
+            }
+
+            const productId = currentModalProductId;
+            toggleLoading('modalAddReviewBtn', true, 'Додавання');
+
+            let url = null;
+            let type = null;
+            let storagePath = null;
+            if (file) {
+                try {
+                    type = file.type.startsWith('video/') ? 'video' : 'image';
+                    storagePath = `productReviews/${productId}/${Date.now()}_${file.name}`;
+                    const storageRef = ref(storage, storagePath);
+                    await uploadBytes(storageRef, file);
+                    url = await getDownloadURL(storageRef);
+                } catch (e) {
+                    console.error(e);
+                    showToast("Помилка завантаження файлу", true);
+                    toggleLoading('modalAddReviewBtn', false, 'Додати відгук');
+                    return;
+                }
+            }
+
+            const newReview = { user, rating, text, date, type, url, storagePath };
+            const updatedReviews = [...currentModalReviews, newReview];
+
+            try {
+                await setDoc(doc(db, 'productReviews', String(productId)), { reviews: updatedReviews }, { merge: true });
+                document.getElementById('modalReviewUser').value = '';
+                document.getElementById('modalReviewText').value = '';
+                document.getElementById('modalReviewRating').value = '5';
+                fileInput.value = '';
+                showToast("✅ Відгук додано");
+            } catch (err) {
+                console.error(err);
+                showToast("Помилка збереження відгуку", true);
+            } finally {
+                toggleLoading('modalAddReviewBtn', false, 'Додати відгук');
+            }
+        });
+
         window.openProductModal = (productId) => {
             const product = keycrmProducts.find(p => p.id === productId);
             if (!product) return;
@@ -1310,6 +1357,8 @@
             document.getElementById('productModal').classList.remove('hidden');
             document.getElementById('modalPhotosGrid').innerHTML = '<p class="col-span-full text-xs text-gray-400 italic">Завантаження...</p>';
             document.getElementById('modalVideosGrid').innerHTML = '<p class="col-span-full text-xs text-gray-400 italic">Завантаження...</p>';
+            document.getElementById('modalReviewsList').innerHTML = '<p class="text-xs text-gray-400 italic">Завантаження...</p>';
+            document.getElementById('modalReviewDate').value = new Date().toISOString().slice(0, 10);
 
             if (productMediaUnsubscribe) productMediaUnsubscribe();
             productMediaUnsubscribe = onSnapshot(doc(db, 'productMedia', String(productId)), (snap) => {
@@ -1323,6 +1372,16 @@
                 document.getElementById('modalPhotosGrid').innerHTML = '<p class="col-span-full text-xs text-red-500">Помилка завантаження фото</p>';
                 document.getElementById('modalVideosGrid').innerHTML = '<p class="col-span-full text-xs text-red-500">Помилка завантаження відео</p>';
             });
+
+            if (productReviewsUnsubscribe) productReviewsUnsubscribe();
+            productReviewsUnsubscribe = onSnapshot(doc(db, 'productReviews', String(productId)), (snap) => {
+                const data = snap.exists() ? snap.data() : {};
+                currentModalReviews = Array.isArray(data.reviews) ? data.reviews : [];
+                renderModalReviews();
+            }, (err) => {
+                console.error(err);
+                document.getElementById('modalReviewsList').innerHTML = '<p class="text-xs text-red-500">Помилка завантаження відгуків</p>';
+            });
         };
 
         window.closeProductModal = () => {
@@ -1331,11 +1390,20 @@
                 productMediaUnsubscribe();
                 productMediaUnsubscribe = null;
             }
+            if (productReviewsUnsubscribe) {
+                productReviewsUnsubscribe();
+                productReviewsUnsubscribe = null;
+            }
             currentModalProductId = null;
             currentModalPhotos = [];
             currentModalVideos = [];
+            currentModalReviews = [];
             document.getElementById('modalPhotoInput').value = '';
             document.getElementById('modalVideoInput').value = '';
+            document.getElementById('modalReviewUser').value = '';
+            document.getElementById('modalReviewText').value = '';
+            document.getElementById('modalReviewRating').value = '5';
+            document.getElementById('modalReviewFile').value = '';
         };
 
         window.deleteModalPhoto = async (idx) => {

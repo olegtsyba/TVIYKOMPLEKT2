@@ -3,8 +3,10 @@ export interface Review {
   user: string;
   rating: number;
   text: string;
+  date?: string; // YYYY-MM-DD, admin-entered (often retroactive - review predates entry)
   type?: 'video' | 'image';
   url?: string;
+  storagePath?: string; // Storage path for the attached file, used by admin.html to delete it
 }
 
 export interface SizeChartRow {
