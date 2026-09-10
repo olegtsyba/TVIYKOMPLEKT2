@@ -1163,9 +1163,9 @@ export default function App() {
                                   <span className="flex items-center gap-2"> <PlayIcon /> Дивитись відеоогляд</span>
                                   {showVideoAccordion ? <ChevronUpIcon /> : <ChevronDownIcon />}
                                 </button>
-                                <div className={`overflow-hidden transition-all duration-500 ease-in-out ${showVideoAccordion ? 'max-h-96 opacity-100 pb-6' : 'max-h-0 opacity-0'}`}>
-                                   <div className="aspect-video bg-black rounded-sm overflow-hidden shadow-lg">
-                                      <iframe 
+                                <div className={`overflow-hidden transition-all duration-500 ease-in-out ${showVideoAccordion ? 'max-h-[560px] opacity-100 pb-6' : 'max-h-0 opacity-0'}`}>
+                                   <div className="aspect-[9/16] w-[280px] max-w-full mx-auto bg-black rounded-sm overflow-hidden shadow-lg">
+                                      <iframe
                                           src={getEmbedUrl(selectedProduct.videoId)}
                                           title="Video review"
                                           className="w-full h-full"
