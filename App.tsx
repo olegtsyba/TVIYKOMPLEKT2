@@ -812,6 +812,9 @@ export default function App() {
           {/* Desktop filter sidebar */}
           <aside className="hidden md:block w-64 shrink-0 sticky top-[150px]">
             <CatalogFilters
+              categories={CATEGORIES}
+              activeCategory={activeCategory}
+              onSelectCategory={(id) => { setActiveCategory(id); setVisibleCount(8); }}
               availableColors={availableColors}
               selectedColors={selectedColors}
               onToggleColor={(color) => setSelectedColors(prev => {
@@ -935,6 +938,9 @@ export default function App() {
               </button>
             </div>
             <CatalogFilters
+              categories={CATEGORIES}
+              activeCategory={activeCategory}
+              onSelectCategory={(id) => { setActiveCategory(id); setVisibleCount(8); }}
               availableColors={availableColors}
               selectedColors={selectedColors}
               onToggleColor={(color) => setSelectedColors(prev => {
