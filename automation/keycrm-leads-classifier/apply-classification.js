@@ -57,10 +57,6 @@ const SELECTORS = {
   reasonItem: 'li.el-dropdown-menu__item',
 };
 
-function escapeRegExp(s) {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
 function stripChatPrefix(text) {
   return text ? text.replace(/^\s*Чат\s*з\s*/i, '').trim() : null;
 }
@@ -245,23 +241,32 @@ async function openReasonDropdown(page, modal) {
   return menu;
 }
 
-function findReasonItem(menu, reasonText) {
-  const pattern = new RegExp(`^\\s*${escapeRegExp(reasonText)}\\s*$`);
-  return menu.locator(SELECTORS.reasonItem, { hasText: pattern }).first();
+// Нормалізація пробілів з ОБОХ боків перед порівнянням — захист від
+// дрібних розбіжностей у пробілах між текстом причини від класифікатора й
+// реальним пунктом меню KeyCRM (напр. "Не актуально" vs "Неактуально" —
+// підтверджений живий кейс, лід 39425, 2026-09-10). Порівняння точне
+// (не substring), просто без чутливості до зайвих/подвійних пробілів.
+function normalizeReasonText(text) {
+  return (text || '').replace(/\s+/g, ' ').trim();
+}
+
+async function findReasonItemIndex(menu, reasonText) {
+  const target = normalizeReasonText(reasonText);
+  const texts = await menu.locator(SELECTORS.reasonItem).allTextContents();
+  return texts.findIndex((t) => normalizeReasonText(t) === target);
 }
 
 // КРИТИЧНО: у dry-run (live === false) ця функція НІКОЛИ не викликає
-// .click() на пункті причини — лише .count() для перевірки, що потрібний
-// li існує в меню. Реальний клік (який одразу шле PUT /leads/{id} і
-// фіналізує статус — підтверджено recon'ом, окремого підтвердження в
-// UI немає) відбувається ТІЛЬКИ якщо live === true.
+// .click() на пункті причини — лише пошук індексу для перевірки, що
+// потрібний li існує в меню. Реальний клік (який одразу шле PUT
+// /leads/{id} і фіналізує статус — підтверджено recon'ом, окремого
+// підтвердження в UI немає) відбувається ТІЛЬКИ якщо live === true.
 async function selectReason(page, menu, reasonText, live) {
-  const item = findReasonItem(menu, reasonText);
-  const found = (await item.count()) > 0;
-  if (!found) return { found: false, clicked: false };
+  const index = await findReasonItemIndex(menu, reasonText);
+  if (index === -1) return { found: false, clicked: false };
   if (!live) return { found: true, clicked: false };
 
-  await item.click();
+  await menu.locator(SELECTORS.reasonItem).nth(index).click();
   await page.waitForTimeout(1500);
   return { found: true, clicked: true };
 }
