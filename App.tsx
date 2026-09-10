@@ -841,7 +841,7 @@ export default function App() {
                 <h4 className="font-bold text-sm uppercase tracking-widest mb-6">Контакти</h4>
                 <p className="text-sm text-gray-400 mb-3">Зв'яжіться з нами в Instagram</p>
                 <a
-                    href="https://www.instagram.com/tviykomplekt/"
+                    href="https://ig.me/m/tviykomplekt"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-2 text-sm text-white hover:text-gray-300 transition-colors"
