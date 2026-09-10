@@ -902,7 +902,7 @@ export default function App() {
                 </button>
 
                 <div className="flex-1 overflow-y-auto">
-                    <div className="flex flex-col md:flex-row h-full">
+                    <div className="flex flex-col md:flex-row md:h-full">
                         {/* Gallery */}
                         <div className="w-full md:w-1/2 bg-gray-50 p-4 md:p-8 flex flex-col h-[50vh] md:h-auto">
                            {(() => {
@@ -972,7 +972,7 @@ export default function App() {
                         </div>
 
                         {/* Info */}
-                        <div className="w-full md:w-1/2 p-6 md:p-10 flex flex-col bg-white overflow-y-auto">
+                        <div className="w-full md:w-1/2 p-6 md:p-10 flex flex-col bg-white md:overflow-y-auto">
                             <div className="mb-6">
                                 <h2 className="font-serif text-2xl md:text-3xl mb-1 leading-tight">{selectedProduct.title}</h2>
                                 <div className="flex items-center gap-2 mb-3">
