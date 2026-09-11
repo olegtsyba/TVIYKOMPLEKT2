@@ -53,6 +53,7 @@
     }
   ],
   "storage": {
+    "bucket": "tviykomplekt-88100.firebasestorage.app",
     "rules": "storage.rules"
   },
   "firestore": {
