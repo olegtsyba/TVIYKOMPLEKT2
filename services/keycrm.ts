@@ -45,15 +45,29 @@ interface KeycrmPage<T> {
   last_page: number;
 }
 
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+// Our proxy (functions/index.js keycrmProxy) only forwards KeyCRM's status
+// code + body, not response headers, so there's no Retry-After to read -
+// just back off with increasing delays. 4 attempts total (3 retries).
+const RATE_LIMIT_BACKOFF_MS = [1000, 2000, 4000];
+
 async function fetchJson<T>(path: string, params: Record<string, string | number> = {}): Promise<T> {
   const search = new URLSearchParams();
   Object.entries(params).forEach(([key, value]) => search.set(key, String(value)));
   const qs = search.toString();
-  const res = await fetch(`${PROXY_BASE}${path}${qs ? `?${qs}` : ''}`);
-  if (!res.ok) {
+  const url = `${PROXY_BASE}${path}${qs ? `?${qs}` : ''}`;
+
+  for (let attempt = 0; ; attempt++) {
+    const res = await fetch(url);
+    if (res.ok) return res.json();
+
+    if (res.status === 429 && attempt < RATE_LIMIT_BACKOFF_MS.length) {
+      await sleep(RATE_LIMIT_BACKOFF_MS[attempt]);
+      continue;
+    }
     throw new Error(`KeyCRM proxy request failed: ${path} (${res.status})`);
   }
-  return res.json();
 }
 
 export async function fetchAllKeycrmProducts(): Promise<KeycrmProduct[]> {
@@ -92,6 +106,13 @@ export async function fetchOffersForProduct(productId: number | string): Promise
 // product's colors, not just ones the user has opened) instead of one
 // request per product. onPage lets the caller merge results incrementally
 // as pages arrive rather than waiting for all ~39.
+//
+// PAGE_DELAY_MS throttles requests between pages - firing all ~39 back to
+// back tripped KeyCRM's rate limit (429, observed live 2026-09-11). fetchJson
+// also retries individual 429s with backoff, but spacing requests out here
+// avoids triggering the limit in the first place.
+const OFFERS_PAGE_DELAY_MS = 200;
+
 export async function fetchAllKeycrmOffers(onPage?: (pageOffers: KeycrmOffer[]) => void): Promise<KeycrmOffer[]> {
   const all: KeycrmOffer[] = [];
   let page = 1;
@@ -103,6 +124,7 @@ export async function fetchAllKeycrmOffers(onPage?: (pageOffers: KeycrmOffer[]) 
     onPage?.(active);
     lastPage = data.last_page;
     page += 1;
+    if (page <= lastPage) await sleep(OFFERS_PAGE_DELAY_MS);
   } while (page <= lastPage);
   return all;
 }
