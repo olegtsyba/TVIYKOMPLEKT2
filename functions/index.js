@@ -158,13 +158,6 @@ exports.sendOrderNotification = onRequest(
       const price = Number(itemObj.price) || 0;
       const variant = color ? `${size}, ${color}` : size;
       message += `${index + 1}. ${title} (${variant}) - ${price} грн\n`;
-      // Optional field: older clients simply don't send it.
-      if (itemObj.isPreorder === true) {
-        const eta = isNonEmptyString(itemObj.preorderEta)
-          ? ` · відправка ${escapeHtml(itemObj.preorderEta)}`
-          : "";
-        message += `   ⏳ <b>ПЕРЕДЗАМОВЛЕННЯ</b>${eta}\n`;
-      }
     });
     message += `\n💰 <b>Разом до сплати:</b> ${Number(total) || 0} грн`;
 

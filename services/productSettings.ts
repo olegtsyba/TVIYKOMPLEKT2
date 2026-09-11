@@ -60,10 +60,11 @@ export function isPreorder(product: Product): boolean {
   return product.availability?.status === 'preorder';
 }
 
-// Anything other than in_stock and preorder means the shopper cannot buy now.
+// Only plain in-stock goes through the cart. Preorder included: it is agreed in
+// the chat with a manager, since orders must land in KeyCRM rather than Telegram.
 export function isPurchasable(product: Product): boolean {
   const status = product.availability?.status;
-  return !status || status === 'in_stock' || status === 'preorder';
+  return !status || status === 'in_stock';
 }
 
 function parseDate(value: unknown): string | undefined {

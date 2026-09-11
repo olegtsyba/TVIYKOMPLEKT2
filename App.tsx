@@ -570,12 +570,6 @@ export default function App() {
             size: item.selectedSize,
             color: item.selectedColor,
             price: item.price,
-            // Optional: the notification function ignores unknown fields, so an
-            // older deployed function still accepts this payload unchanged.
-            ...(isPreorder(item) ? { isPreorder: true } : {}),
-            ...(isPreorder(item) && item.availability?.leadTime
-              ? { preorderEta: item.availability.leadTime }
-              : {}),
           })),
           total: cartTotal,
         })
@@ -620,6 +614,33 @@ export default function App() {
       typeOfOpen: widget ? typeof widget.open : 'no widget',
     });
     showToast("Напишіть нам у чат — кнопка в правому нижньому куті", "success");
+  };
+
+  // The widget offers no way to prefill its input - open/close/toggle take no
+  // arguments and the iframe is cross-origin - so the shopper pastes instead.
+  // writeText must be called inside the click for the clipboard permission.
+  const askInChat = (product: Product) => {
+    const parts = [product.title];
+    if (selectedColorForModal) parts.push(`колір ${selectedColorForModal}`);
+    if (selectedSizeForModal) parts.push(`розмір ${selectedSizeForModal}`);
+    const intro = isPreorder(product) ? 'Хочу передзамовити' : 'Цікавить надходження';
+    const text = `${intro}: ${parts.join(', ')} (арт. ${product.id})`;
+
+    let copying: Promise<void> | null = null;
+    try {
+      copying = navigator.clipboard?.writeText(text) ?? null;
+    } catch {
+      copying = null; // no clipboard API, or blocked by the browser
+    }
+
+    openKeycrmChat();
+
+    // A rejected permission must not surface as an error - the chat is open and
+    // the shopper can simply type.
+    copying?.then(
+      () => showToast("Назву товару скопійовано — вставте в повідомлення"),
+      () => {},
+    );
   };
 
   // The chart is an inline accordion in the right-hand column - below the gallery
@@ -1459,16 +1480,14 @@ export default function App() {
                                         : 'bg-gray-200 text-gray-400 cursor-not-allowed'
                                     }`}
                                 >
-                                    {!hasValidPrice
-                                        ? 'Ціна уточнюється'
-                                        : isPreorder(selectedProduct) ? 'Передзамовити' : 'Додати в кошик'}
+                                    {hasValidPrice ? 'Додати в кошик' : 'Ціна уточнюється'}
                                 </button>
                             ) : (
                                 <button
-                                    onClick={openKeycrmChat}
+                                    onClick={() => askInChat(selectedProduct)}
                                     className="w-full py-4 uppercase tracking-widest text-sm font-bold transition-colors shadow-lg mb-6 bg-black text-white hover:bg-gray-800"
                                 >
-                                    Дізнатись про надходження
+                                    {isPreorder(selectedProduct) ? 'Передзамовити' : 'Дізнатись про надходження'}
                                 </button>
                             )}
 
