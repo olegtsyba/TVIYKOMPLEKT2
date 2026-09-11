@@ -58,7 +58,7 @@ const ZoomInIcon = () => (
 const DEFAULT_SETTINGS: SiteSettings = {
   heroTitle: "NEW\nCOLLECTION",
   heroSubtitle: "НОВА КОЛЕКЦІЯ",
-  heroBackgroundUrl: "/hero-options/IMG_2275.jpeg",
+  heroBackgroundUrl: "/hero-options/IMG_2275.jpg",
   logoText: "TVIYKOMPLEKT",
   heroDescription: "Естетика. Комфорт. Впевненість. Одяг, який підкреслює твою індивідуальність."
 };
@@ -746,8 +746,18 @@ export default function App() {
       <section className="relative h-[600px] md:h-[80vh] w-full bg-gray-900 overflow-hidden flex items-center justify-center md:justify-start">
         <div className="absolute inset-0 z-0">
             {/* Background Image with Fallback */}
-            <img 
-                src={siteSettings.heroBackgroundUrl || DEFAULT_SETTINGS.heroBackgroundUrl}
+            {(() => {
+                const heroUrl = siteSettings.heroBackgroundUrl || DEFAULT_SETTINGS.heroBackgroundUrl;
+                // Optional WebP sibling next to a .jpg/.jpeg/.png hero photo (same
+                // basename) - if it 404s the <picture> just falls through to the
+                // <img> below, so this is safe even for admin-set URLs with no
+                // matching .webp file.
+                const heroWebpUrl = /\.(jpe?g|png)$/i.test(heroUrl) ? heroUrl.replace(/\.(jpe?g|png)$/i, '.webp') : null;
+                return (
+                <picture>
+                {heroWebpUrl && <source srcSet={heroWebpUrl} type="image/webp" />}
+                <img
+                src={heroUrl}
                 alt="Hero Background"
                 // md:-only zoom+re-anchor: on the very wide desktop banner this
                 // portrait photo's full width is already shown by object-fit:cover
@@ -760,7 +770,10 @@ export default function App() {
                 // to the banner) text panel.
                 className="w-full h-full object-cover opacity-80 md:scale-[1.3] md:origin-[11%_50%]"
                 style={{ objectPosition: '50% 60%' }}
-            />
+                />
+                </picture>
+                );
+            })()}
             <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent"></div>
         </div>
         
