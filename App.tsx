@@ -605,19 +605,20 @@ export default function App() {
     }
   };
 
-  // The KeyCRM widget (index.html) renders its own launcher and does not document
-  // a public open() method, so try the plausible ones and otherwise point the
-  // shopper at the launcher rather than silently doing nothing.
+  // The KeyCRM widget (index.html) exposes open/close/toggle once its script has
+  // loaded. It renders above the product modal on its own, so leave the modal open.
   const openKeycrmChat = () => {
     const widget = (window as any).KeyCRM;
-    if (widget) {
-      for (const method of ['open', 'show', 'openChat', 'toggle']) {
-        if (typeof widget[method] === 'function') {
-          widget[method]();
-          return;
-        }
-      }
+    if (widget && typeof widget.open === 'function') {
+      widget.open();
+      return;
     }
+    // Only reachable before the async widget script has loaded, or if it failed.
+    console.warn('KeyCRM chat unavailable', {
+      widget,
+      keys: widget ? Object.keys(widget) : null,
+      typeOfOpen: widget ? typeof widget.open : 'no widget',
+    });
     showToast("Напишіть нам у чат — кнопка в правому нижньому куті", "success");
   };
 
