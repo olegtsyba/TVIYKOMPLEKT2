@@ -9,6 +9,18 @@ export interface Review {
   storagePath?: string; // Storage path for the attached file, used by admin.html to delete it
 }
 
+// Measurements of the model shown in one specific gallery photo, so a shopper
+// can judge fit. Optional fields are absent rather than null when unset — the
+// product card renders a row only for the fields that are present.
+export interface PhotoModelInfo {
+  height: number; // cm
+  size: string;   // XS..XXL
+  bust?: number;  // cm
+  waist?: number; // cm
+  hips?: number;  // cm
+  note?: string;
+}
+
 export interface SizeChartRow {
   size: string;
   bust: string;
@@ -60,6 +72,7 @@ export interface Product {
   relatedColors?: RelatedColor[];
   image?: string; // Legacy support
   extraVideos?: string[]; // Admin-uploaded video reviews (productMedia/{keycrmId}.videos)
+  modelInfoByUrl?: Record<string, PhotoModelInfo>; // keyed by normalized photo URL
 }
 
 export interface Promotion {

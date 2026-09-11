@@ -12,6 +12,7 @@ import {
 import { fetchActivePromotions, applyPromotion } from './services/promotions';
 import { fetchProductMediaMap, applyProductMedia } from './services/productMedia';
 import { fetchProductReviewsMap, applyProductReviews } from './services/productReviews';
+import { fetchProductModelInfoMap, applyProductModelInfo, normalizePhotoUrl } from './services/productModelInfo';
 import CatalogFilters from './components/CatalogFilters';
 
 // Icons using SVG components
@@ -136,6 +137,8 @@ export default function App() {
   // Modal specific states
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [showSizeTable, setShowSizeTable] = useState(false);
+  const [modelInfoExpanded, setModelInfoExpanded] = useState(false);
+  const sizeChartRef = useRef<HTMLDivElement>(null);
   const [showVideoAccordion, setShowVideoAccordion] = useState(false);
   const [showReviewsAccordion, setShowReviewsAccordion] = useState(false);
   const [sizeError, setSizeError] = useState(false);
@@ -199,11 +202,12 @@ export default function App() {
 
         // 2. Fetch Products from KeyCRM (catalog) + Firestore (point discounts)
         try {
-          const [kcProducts, promotions, productMedia, productReviews] = await Promise.all([
+          const [kcProducts, promotions, productMedia, productReviews, productModelInfo] = await Promise.all([
             fetchAllKeycrmProducts(),
             fetchActivePromotions(),
             fetchProductMediaMap(),
             fetchProductReviewsMap(),
+            fetchProductModelInfoMap(),
           ]);
 
           const products = kcProducts
@@ -212,7 +216,14 @@ export default function App() {
             .map(mapKeycrmProduct);
 
           // Render the grid immediately with what we have.
-          setAllProducts(products.map(p => applyProductReviews(applyProductMedia(applyPromotion(p, promotions.get(String(p.id))), productMedia.get(String(p.id))), productReviews.get(String(p.id)))));
+          const withOverlays = (p: Product): Product => {
+            const id = String(p.id);
+            let out = applyPromotion(p, promotions.get(id));
+            out = applyProductMedia(out, productMedia.get(id));
+            out = applyProductReviews(out, productReviews.get(id));
+            return applyProductModelInfo(out, productModelInfo.get(id));
+          };
+          setAllProducts(products.map(withOverlays));
 
           // Sizes/colors/variantOffers for the WHOLE catalog, not just products
           // the user has opened - the color filter's swatch list needs every
@@ -311,6 +322,7 @@ export default function App() {
     if (selectedProduct) {
       setCurrentImageIndex(0);
       setShowSizeTable(false);
+      setModelInfoExpanded(false);
       setShowVideoAccordion(false);
       setShowReviewsAccordion(false);
       setSelectedSizeForModal('');
@@ -333,6 +345,11 @@ export default function App() {
       .find(o => o.color === selectedColorForModal && o.thumbnailUrl);
     setColorImageOverride(offerWithPhoto ? offerWithPhoto.thumbnailUrl : null);
   }, [selectedColorForModal, selectedProduct]);
+
+  // The plaque belongs to one photo, so swiping the gallery collapses it.
+  useEffect(() => {
+    setModelInfoExpanded(false);
+  }, [currentImageIndex, colorImageOverride]);
 
   // Lazily load sizes/colors (KeyCRM offers) the first time a product is opened
   useEffect(() => {
@@ -592,6 +609,14 @@ export default function App() {
     } catch (error) {
       showToast("❌ Помилка з'єднання.", "error");
     }
+  };
+
+  // The chart is an inline accordion in the right-hand column - below the gallery
+  // on mobile - so opening it without scrolling looks like nothing happened. The
+  // delay waits out the 300ms max-height transition so the target is full height.
+  const openSizeChart = () => {
+    setShowSizeTable(true);
+    setTimeout(() => sizeChartRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 320);
   };
 
   // Determine which size chart to use
@@ -1101,6 +1126,20 @@ export default function App() {
                                // Prepare image objects for the lightbox
                                const productLightboxItems: LightboxItem[] = images.map(url => ({ type: 'image', url }));
 
+                               // Whatever the hero <img> is actually showing. A color-specific
+                               // offer thumbnail isn't part of the gallery, so it simply has no
+                               // entry and no plaque appears.
+                               const shownUrl = colorImageOverride || images[currentImageIndex] || images[0];
+                               const modelInfo = selectedProduct.modelInfoByUrl?.[normalizePhotoUrl(shownUrl)];
+                               const modelInfoDetails = modelInfo
+                                   ? [
+                                       modelInfo.bust !== undefined ? { label: 'Груди', value: modelInfo.bust } : null,
+                                       modelInfo.waist !== undefined ? { label: 'Талія', value: modelInfo.waist } : null,
+                                       modelInfo.hips !== undefined ? { label: 'Стегна', value: modelInfo.hips } : null,
+                                     ].filter(Boolean) as { label: string; value: number }[]
+                                   : [];
+                               const canExpand = !!modelInfo && (modelInfoDetails.length > 0 || !!modelInfo.note);
+
                                return (
                                    <>
                                        <div 
@@ -1140,6 +1179,57 @@ export default function App() {
                                                         <ArrowRightIcon />
                                                     </button>
                                                 </>
+                                            )}
+
+                                            {modelInfo && (
+                                                <div
+                                                    className="absolute bottom-3 left-3 z-10 max-w-[calc(100%-1.5rem)] cursor-default"
+                                                    onClick={(e) => e.stopPropagation()}
+                                                >
+                                                    <div className="bg-white/85 backdrop-blur-sm rounded shadow-sm text-gray-800 overflow-hidden">
+                                                        <div className="flex items-stretch divide-x divide-black/10">
+                                                            {canExpand ? (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => setModelInfoExpanded(prev => !prev)}
+                                                                    className="flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] leading-tight text-left font-medium hover:bg-white/60 transition-colors"
+                                                                >
+                                                                    Зріст {modelInfo.height} см · розмір {modelInfo.size}
+                                                                    <span className={`transition-transform duration-200 ${modelInfoExpanded ? 'rotate-180' : ''}`}>
+                                                                        <ChevronDownIcon />
+                                                                    </span>
+                                                                </button>
+                                                            ) : (
+                                                                <span className="px-2.5 py-1.5 text-[11px] leading-tight font-medium">
+                                                                    Зріст {modelInfo.height} см · розмір {modelInfo.size}
+                                                                </span>
+                                                            )}
+                                                            <button
+                                                                type="button"
+                                                                onClick={openSizeChart}
+                                                                className="px-2.5 py-1.5 text-[11px] leading-tight whitespace-nowrap text-gray-600 hover:bg-white/60 hover:text-black transition-colors"
+                                                            >
+                                                                Розмірна сітка
+                                                            </button>
+                                                        </div>
+
+                                                        {canExpand && modelInfoExpanded && (
+                                                            <div className="px-2.5 py-2 border-t border-black/10 text-[11px] leading-snug space-y-0.5 animate-fade-in">
+                                                                {modelInfoDetails.map(detail => (
+                                                                    <div key={detail.label} className="flex justify-between gap-4">
+                                                                        <span className="text-gray-500">{detail.label}</span>
+                                                                        <span className="font-medium">{detail.value} см</span>
+                                                                    </div>
+                                                                ))}
+                                                                {modelInfo.note && (
+                                                                    <p className={`text-gray-600 ${modelInfoDetails.length > 0 ? 'pt-1 mt-1 border-t border-black/5' : ''}`}>
+                                                                        {modelInfo.note}
+                                                                    </p>
+                                                                )}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
                                             )}
                                        </div>
                                        
@@ -1230,7 +1320,7 @@ export default function App() {
                             )}
 
                             {/* Sizes & Chart */}
-                            <div className="mb-6">
+                            <div className="mb-6" ref={sizeChartRef}>
                                 <div className="flex justify-between items-center mb-3">
                                     <p className={`text-xs uppercase font-bold tracking-wider transition-colors ${sizeError ? 'text-red-500' : 'text-gray-900'}`}>
                                         {sizeError ? '⚠️ Оберіть розмір:' : 'Оберіть розмір:'}
