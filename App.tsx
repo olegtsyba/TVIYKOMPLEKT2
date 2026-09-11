@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import ReactDOM from 'react-dom/client';
 import { PRODUCTS, CATEGORIES, SIZE_CHARTS, DEFAULT_PRODUCT_DESCRIPTION, COLOR_HEX } from './constants';
-import { Product, CartItem, SiteSettings, Review, SizeChartRow } from './types';
+import { Product, CartItem, SiteSettings, Review, SizeChartRow, BadgeType } from './types';
 import {
   fetchAllKeycrmProducts, fetchOffersForProduct, mapKeycrmProduct, deriveVariants,
   fetchAllKeycrmOffers, deriveVariantsByProduct, readCachedOfferVariants, writeCachedOfferVariants, sizeSortKey,
@@ -11,7 +11,7 @@ import { fetchActivePromotions, applyPromotion } from './services/promotions';
 import { fetchProductMediaMap, applyProductMedia } from './services/productMedia';
 import { fetchProductReviewsMap, applyProductReviews } from './services/productReviews';
 import { fetchProductModelInfoMap, applyProductModelInfo, normalizePhotoUrl } from './services/productModelInfo';
-import { fetchProductSettingsMap, applyProductSettings } from './services/productSettings';
+import { fetchProductSettingsMap, applyProductSettings, BADGE_LABELS } from './services/productSettings';
 import CatalogFilters from './components/CatalogFilters';
 
 // Icons using SVG components
@@ -92,6 +92,16 @@ const FOOTER_INFO_CONTENT: Record<FooterInfoKey, { title: string; paragraphs: st
       'ОС (обхват стегон) — по найширшій частині стегон і сідниць.',
     ],
   },
+};
+
+// Monochrome by design - these sit next to the red SALE badge and must not turn
+// the card into a sticker wall. Same geometry throughout; only the fill differs,
+// so the four types stay distinguishable without colour.
+const BADGE_STYLES: Record<BadgeType, string> = {
+  new: 'bg-black text-white tracking-widest',
+  hit: 'bg-white text-black border border-black tracking-widest',
+  limited: 'bg-black text-white border border-white/40 tracking-[0.2em]',
+  back: 'bg-gray-200 text-gray-900 tracking-widest',
 };
 
 interface LightboxItem {
@@ -915,9 +925,9 @@ export default function App() {
                                 
                                 {/* Badges Container - Top Left Stacked */}
                                 <div className="absolute top-2 left-2 flex flex-col gap-1 items-start z-10">
-                                    {product.isNew && (
-                                         <div className="bg-black text-white text-[10px] font-bold px-2 py-1 uppercase tracking-widest shadow-sm">
-                                            NEW
+                                    {product.marketingBadge && (
+                                         <div className={`text-[10px] font-bold px-2 py-1 uppercase shadow-sm ${BADGE_STYLES[product.marketingBadge.type]}`}>
+                                            {BADGE_LABELS[product.marketingBadge.type]}
                                          </div>
                                     )}
                                     {product.oldPrice && product.oldPrice > product.price && (
