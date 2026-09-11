@@ -192,7 +192,11 @@ export default function App() {
                 ...data,
                 // Ensure if heroBackgroundUrl was deleted (undefined), we use the default
                 heroBackgroundUrl: data.heroBackgroundUrl || DEFAULT_SETTINGS.heroBackgroundUrl,
-                heroDescription: data.heroDescription || DEFAULT_SETTINGS.heroDescription
+                heroDescription: data.heroDescription || DEFAULT_SETTINGS.heroDescription,
+                // Unlike the hero fields, logoText has no fallback at its three
+                // render sites (header, footer heading, copyright), so an empty
+                // value here would blank the brand name site-wide.
+                logoText: data.logoText || DEFAULT_SETTINGS.logoText
             };
             setSiteSettings(finalSettings as SiteSettings);
           }

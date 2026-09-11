@@ -643,12 +643,23 @@
         };
 
         document.getElementById('saveSettingsBtn').addEventListener('click', async () => {
+            // The form loads blank when settings/site_content has no fields yet, so
+            // a stray save would write an empty logoText - which is the one setting
+            // the storefront renders without a fallback.
+            const logoTextEl = document.getElementById('logoText');
+            logoTextEl.classList.remove('border-red-500');
+            if (!logoTextEl.value.trim()) {
+                logoTextEl.classList.add('border-red-500');
+                showToast("Вкажіть назву бренду — вона показується в шапці й підвалі сайту", true);
+                return;
+            }
+
             toggleLoading('saveSettingsBtn', true, 'Збереження');
             try {
                 const shouldResetBg = document.getElementById('resetHeroBg').checked;
-                
+
                 const data = {
-                    logoText: document.getElementById('logoText').value,
+                    logoText: logoTextEl.value.trim(),
                     heroTitle: document.getElementById('heroTitle').value,
                     heroSubtitle: document.getElementById('heroSubtitle').value,
                     heroDescription: document.getElementById('heroDescription').value,

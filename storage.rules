@@ -4,11 +4,20 @@ rules_version = '2';
 // anyone, gated only by an expiry date - 2026-01-04) were still in place and
 // have since expired, so production is currently fully locked (deny-all).
 // This file replaces that with permanent, path-scoped rules instead of
-// another time-boxed placeholder. "Admin" == any signed-in Firebase Auth user
-// (see the same note in firestore.rules - admin.html has no separate
-// role/claim system).
+// another time-boxed placeholder.
+//
+// Writes are an explicit UID allowlist, not "any signed-in user" - see the
+// longer note in firestore.rules for why. Keep this list identical to the one
+// there; adding a manager means appending their UID in both files.
 service firebase.storage {
   match /b/{bucket}/o {
+
+    function isAdmin() {
+      return request.auth != null
+          && request.auth.uid in [
+               'oZKjcE1p2mQhmdQ3KbZ7QJV7ulm2'
+             ];
+    }
 
     // Deny everything by default; only the paths below are reachable.
     match /{allPaths=**} {
@@ -18,7 +27,7 @@ service firebase.storage {
     // Admin-uploaded product images (admin.html "Додати новий товар").
     match /products/{allPaths=**} {
       allow read: if true;
-      allow write, delete: if request.auth != null;
+      allow write, delete: if isAdmin();
     }
 
     // Manually-entered customer reviews' attached photo/video, keyed by
@@ -27,7 +36,7 @@ service firebase.storage {
     // mixing image and video files since each review carries at most one.
     match /productReviews/{keycrmId}/{fileName} {
       allow read: if true;
-      allow write, delete: if request.auth != null;
+      allow write, delete: if isAdmin();
     }
 
     // Admin-only extra photos overlaid on the KeyCRM catalog
@@ -35,7 +44,7 @@ service firebase.storage {
     // in admin.html.
     match /productMedia/{keycrmId}/{fileName} {
       allow read: if true;
-      allow write, delete: if request.auth != null;
+      allow write, delete: if isAdmin();
     }
 
     // Admin-only extra videos overlaid on the KeyCRM catalog
@@ -44,7 +53,7 @@ service firebase.storage {
     // covers one path segment past {keycrmId}.
     match /productMedia/{keycrmId}/videos/{fileName} {
       allow read: if true;
-      allow write, delete: if request.auth != null;
+      allow write, delete: if isAdmin();
     }
   }
 }

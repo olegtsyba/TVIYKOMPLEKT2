@@ -1,18 +1,26 @@
 rules_version = '2';
 
-// "Admin" in this project == any signed-in Firebase Auth user. admin.html only
-// ever calls signInWithEmailAndPassword (no public sign-up, no custom claims/
-// roles collection anywhere in the codebase) - accounts can only be created via
-// the Firebase Console / Admin SDK, so request.auth != null is a safe proxy for
-// "is an admin" today. If self-serve sign-up is ever added, this needs revisiting
-// (e.g. a custom claim or an allowlist doc) - out of scope for now.
+// Write access is an explicit UID allowlist, NOT "any signed-in user". The
+// project's apiKey ships in the public client bundle, and with the
+// Email/Password provider enabled anyone can self-register straight against the
+// Identity Toolkit REST API - so request.auth != null is not a proxy for "is an
+// admin". Add a manager by appending their UID to the list below (Firebase
+// Console -> Authentication -> Users -> User UID); nothing else needs changing.
+// Keep this list identical to the one in storage.rules.
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    function isAdmin() {
+      return request.auth != null
+          && request.auth.uid in [
+               'oZKjcE1p2mQhmdQ3KbZ7QJV7ulm2'
+             ];
+    }
 
     // Hero/site content (App.tsx reads this unauthenticated on every page load).
     match /settings/{settingId} {
       allow read: if true;
-      allow write: if request.auth != null;
+      allow write: if isAdmin();
     }
 
     // Legacy Firestore-authored products (admin.html "Додати новий товар").
@@ -20,7 +28,7 @@ service cloud.firestore {
     // from KeyCRM) - only admin.html's create/edit form still touches it - so
     // read is admin-only too, unlike the collections below.
     match /products/{productId} {
-      allow read, write: if request.auth != null;
+      allow read, write: if isAdmin();
     }
 
     // Point discounts keyed by KeyCRM product id (admin.html "Точкова знижка").
@@ -28,7 +36,7 @@ service cloud.firestore {
     // storefront, so read must stay public; only admin.html writes.
     match /promotions/{productId} {
       allow read: if true;
-      allow write: if request.auth != null;
+      allow write: if isAdmin();
     }
 
     // Admin-uploaded extra photos/videos overlaid on the KeyCRM catalog, keyed
@@ -37,7 +45,7 @@ service cloud.firestore {
     // it's just media URLs, nothing sensitive.
     match /productMedia/{productId} {
       allow read: if true;
-      allow write: if request.auth != null;
+      allow write: if isAdmin();
     }
 
     // Manually-entered customer reviews, keyed by KeyCRM product id
@@ -46,7 +54,7 @@ service cloud.firestore {
     // writes. Same pattern as productMedia above.
     match /productReviews/{productId} {
       allow read: if true;
-      allow write: if request.auth != null;
+      allow write: if isAdmin();
     }
 
     // Per-photo model measurements ("Зріст 168 см · розмір S"), keyed by
@@ -56,7 +64,7 @@ service cloud.firestore {
     // writes. Same pattern as productReviews above.
     match /productModelInfo/{productId} {
       allow read: if true;
-      allow write: if request.auth != null;
+      allow write: if isAdmin();
     }
 
     // Everything else stays locked down.
