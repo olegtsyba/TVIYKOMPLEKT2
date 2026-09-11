@@ -1278,6 +1278,16 @@
         const MODEL_INFO_SIZES = ['XS', 'S', 'M', 'L', 'XL', 'XXL'];
         const MODEL_INFO_NOTE_MAX = 150;
 
+        // Single source for the number inputs' min/max and the save-time check,
+        // so the two can't drift. App.tsx applies the same bounds when rendering.
+        const MODEL_INFO_RANGES = {
+            height: { min: 100, max: 250, label: 'Зріст' },
+            bust:   { min: 60,  max: 150, label: 'Груди' },
+            waist:  { min: 40,  max: 130, label: 'Талія' },
+            hips:   { min: 60,  max: 160, label: 'Стегна' },
+        };
+        const MODEL_INFO_OPTIONAL_KEYS = ['bust', 'waist', 'hips'];
+
         // Exactly what the storefront gallery renders, in the same order: KeyCRM
         // attachments first, admin-uploaded productMedia photos appended after.
         // attachments_data already sits in keycrmProducts, so no extra API call.
@@ -1339,16 +1349,15 @@
                         </label>
                         <div class="mi-fields mt-2 space-y-2 ${on ? '' : 'hidden'}">
                             <div class="grid grid-cols-2 gap-2">
-                                <input type="number" min="100" max="250" step="1" class="mi-height text-xs p-2 border rounded w-full" placeholder="Зріст, см *" value="${info && info.height != null ? escapeHtml(String(info.height)) : ''}">
+                                <input type="number" min="${MODEL_INFO_RANGES.height.min}" max="${MODEL_INFO_RANGES.height.max}" step="1" class="mi-height text-xs p-2 border rounded w-full" placeholder="Зріст, см *" value="${info && info.height != null ? escapeHtml(String(info.height)) : ''}">
                                 <select class="mi-size text-xs p-2 border rounded w-full">
                                     <option value="">Розмір *</option>
                                     ${MODEL_INFO_SIZES.map(s => `<option value="${s}" ${info && info.size === s ? 'selected' : ''}>${s}</option>`).join('')}
                                 </select>
                             </div>
                             <div class="grid grid-cols-3 gap-2">
-                                <input type="number" min="30" max="200" step="1" class="mi-bust text-xs p-2 border rounded w-full" placeholder="Груди" value="${info && info.bust != null ? escapeHtml(String(info.bust)) : ''}">
-                                <input type="number" min="30" max="200" step="1" class="mi-waist text-xs p-2 border rounded w-full" placeholder="Талія" value="${info && info.waist != null ? escapeHtml(String(info.waist)) : ''}">
-                                <input type="number" min="30" max="200" step="1" class="mi-hips text-xs p-2 border rounded w-full" placeholder="Стегна" value="${info && info.hips != null ? escapeHtml(String(info.hips)) : ''}">
+                                ${MODEL_INFO_OPTIONAL_KEYS.map(key => `
+                                <input type="number" min="${MODEL_INFO_RANGES[key].min}" max="${MODEL_INFO_RANGES[key].max}" step="1" class="mi-${key} text-xs p-2 border rounded w-full" placeholder="${MODEL_INFO_RANGES[key].label}" title="${MODEL_INFO_RANGES[key].label}: ${MODEL_INFO_RANGES[key].min}-${MODEL_INFO_RANGES[key].max} см" value="${info && info[key] != null ? escapeHtml(String(info[key])) : ''}">`).join('')}
                             </div>
                             <textarea class="mi-note w-full text-xs p-2 border rounded h-14" maxlength="${MODEL_INFO_NOTE_MAX}" placeholder="Примітка (необов'язково)">${escapeHtml(info && info.note ? info.note : '')}</textarea>
                             <div class="flex justify-between items-center gap-2">
@@ -1417,8 +1426,8 @@
 
             const cards = Array.from(document.querySelectorAll('#modalModelInfoGrid [data-url]'));
             cards.forEach(card => {
-                card.querySelector('.mi-height').classList.remove('border-red-500');
-                card.querySelector('.mi-size').classList.remove('border-red-500');
+                ['.mi-height', '.mi-size', ...MODEL_INFO_OPTIONAL_KEYS.map(k => `.mi-${k}`)]
+                    .forEach(sel => card.querySelector(sel).classList.remove('border-red-500'));
             });
 
             const toInt = (value) => {
@@ -1441,20 +1450,30 @@
                     showToast("Заповніть зріст і розмір для всіх увімкнених фото", true);
                     return;
                 }
-                if (height < 100 || height > 250) {
+                if (height < MODEL_INFO_RANGES.height.min || height > MODEL_INFO_RANGES.height.max) {
                     heightEl.classList.add('border-red-500');
-                    showToast("Зріст має бути від 100 до 250 см", true);
+                    showToast(`Зріст має бути від ${MODEL_INFO_RANGES.height.min} до ${MODEL_INFO_RANGES.height.max} см`, true);
                     return;
                 }
 
                 const entry = { url: card.dataset.url, height, size };
-                const bust = toInt(card.querySelector('.mi-bust').value);
-                const waist = toInt(card.querySelector('.mi-waist').value);
-                const hips = toInt(card.querySelector('.mi-hips').value);
+
+                // Optional: blank stays blank, but a filled-in value must be in range.
+                for (const key of MODEL_INFO_OPTIONAL_KEYS) {
+                    const el = card.querySelector(`.mi-${key}`);
+                    const value = toInt(el.value);
+                    if (value === null) continue;
+
+                    const { min, max, label } = MODEL_INFO_RANGES[key];
+                    if (value < min || value > max) {
+                        el.classList.add('border-red-500');
+                        showToast(`${label}: від ${min} до ${max} см`, true);
+                        return;
+                    }
+                    entry[key] = value;
+                }
+
                 const note = card.querySelector('.mi-note').value.trim();
-                if (bust !== null) entry.bust = bust;
-                if (waist !== null) entry.waist = waist;
-                if (hips !== null) entry.hips = hips;
                 if (note) entry.note = note.slice(0, MODEL_INFO_NOTE_MAX);
                 photos.push(entry);
             }
