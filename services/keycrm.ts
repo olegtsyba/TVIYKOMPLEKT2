@@ -3,7 +3,6 @@ import { SIZE_ORDER, COLOR_ALIASES } from '../constants';
 
 const PROXY_BASE = '/api/keycrm';
 const PAGE_LIMIT = 50;
-const NEW_WINDOW_DAYS = 14;
 
 const SIZE_PROPERTY_HINTS = ['розмір', 'размер', 'size'];
 const COLOR_PROPERTY_HINTS = ['колір', 'цвет', 'color', 'колер'];
@@ -154,12 +153,6 @@ export function writeCachedOfferVariants(map: Record<string, ProductVariants>): 
   }
 }
 
-function isWithinDays(dateStr: string, days: number): boolean {
-  const created = new Date(dateStr).getTime();
-  if (Number.isNaN(created)) return false;
-  return Date.now() - created <= days * 24 * 60 * 60 * 1000;
-}
-
 // KeyCRM product descriptions are free text written for internal use. They
 // often end with a supplier / wholesale block (price lists, dropship links,
 // Google Sheets) that must never reach the storefront. sanitizeDescription
@@ -208,7 +201,6 @@ export function mapKeycrmProduct(kc: KeycrmProduct): Product {
     images,
     sizes: [],
     colors: [],
-    isNew: isWithinDays(kc.created_at, NEW_WINDOW_DAYS),
     relatedColors: [],
   };
 }

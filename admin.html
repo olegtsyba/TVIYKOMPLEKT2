@@ -100,40 +100,6 @@
             </div>
         </header>
 
-        <!-- SECTION 1: SITE SETTINGS -->
-        <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-200 mb-8">
-            <div class="flex justify-between items-center mb-6 border-b pb-2">
-                <h2 class="text-lg font-bold uppercase tracking-wider">Налаштування сайту (Hero Section)</h2>
-                <button id="saveSettingsBtn" class="bg-gray-900 text-white px-4 py-2 text-xs font-bold uppercase rounded hover:bg-black transition flex items-center">Зберегти налаштування</button>
-            </div>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                    <label class="block text-xs font-bold uppercase text-gray-500 mb-2">Заголовок Логотипу</label>
-                    <input type="text" id="logoText" class="w-full bg-gray-50 border border-gray-300 p-3 rounded text-sm focus:border-black outline-none">
-                </div>
-                <div>
-                    <label class="block text-xs font-bold uppercase text-gray-500 mb-2">Фонове фото (URL)</label>
-                    <input type="text" id="heroBackgroundUrl" class="w-full bg-gray-50 border border-gray-300 p-3 rounded text-sm focus:border-black outline-none mb-2">
-                    <label class="inline-flex items-center cursor-pointer">
-                        <input type="checkbox" id="resetHeroBg" class="w-4 h-4 text-red-600 border-gray-300 rounded focus:ring-red-500">
-                        <span class="ml-2 text-xs text-red-500 font-bold uppercase">Скинути фон (видалити URL)</span>
-                    </label>
-                </div>
-                <div>
-                    <label class="block text-xs font-bold uppercase text-gray-500 mb-2">Підзаголовок (Subtitle)</label>
-                    <input type="text" id="heroSubtitle" class="w-full bg-gray-50 border border-gray-300 p-3 rounded text-sm focus:border-black outline-none">
-                </div>
-                <div>
-                    <label class="block text-xs font-bold uppercase text-gray-500 mb-2">Головний Заголовок (Title)</label>
-                    <textarea id="heroTitle" class="w-full bg-gray-50 border border-gray-300 p-3 rounded text-sm focus:border-black outline-none h-20"></textarea>
-                </div>
-                <div class="md:col-span-2">
-                    <label class="block text-xs font-bold uppercase text-gray-500 mb-2">Опис (Description)</label>
-                    <textarea id="heroDescription" class="w-full bg-gray-50 border border-gray-300 p-3 rounded text-sm focus:border-black outline-none h-20" placeholder="Короткий опис під заголовком"></textarea>
-                </div>
-            </div>
-        </div>
-
         <!-- SECTION 2: PRODUCT FORM -->
         <form id="productForm" class="space-y-8 mb-12">
             <div class="bg-white p-6 rounded-lg shadow-sm border border-gray-200 relative border-l-4 border-l-black">
@@ -404,6 +370,23 @@
             </div>
 
             <div class="p-6 border-t border-gray-200">
+                <h3 class="text-xs font-bold uppercase text-gray-500 mb-1">Бейдж NEW</h3>
+                <p class="text-xs text-gray-400 mb-3">Показується на картці товару в каталозі. Вмикається вручну — автоматичного правила «новинка N днів» більше немає.</p>
+                <div class="bg-gray-50 border border-gray-200 p-4 rounded flex flex-wrap items-center gap-4">
+                    <label class="flex items-center gap-2 text-xs font-bold cursor-pointer">
+                        <input type="checkbox" id="modalNewBadgeEnabled" class="w-4 h-4">
+                        Бейдж NEW
+                    </label>
+                    <label class="flex items-center gap-2 text-xs text-gray-600">
+                        NEW до
+                        <input type="date" id="modalNewBadgeUntil" class="text-xs p-2 border rounded">
+                    </label>
+                    <span class="text-[10px] text-gray-400">порожня дата — доки не вимкнути</span>
+                    <button type="button" id="modalSaveNewBadgeBtn" class="ml-auto bg-gray-800 text-white px-4 py-2 text-xs uppercase font-bold rounded hover:bg-black flex justify-center items-center">Зберегти бейдж</button>
+                </div>
+            </div>
+
+            <div class="p-6 border-t border-gray-200">
                 <h3 class="text-xs font-bold uppercase text-gray-500 mb-1">Інфо про модель на фото</h3>
                 <p class="text-xs text-gray-400 mb-3">Показується плашкою в нижньому куті фото на сайті. Зріст і розмір обов'язкові, решта — за бажанням.</p>
                 <div id="modalModelInfoGrid" class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
@@ -457,7 +440,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
         import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js";
-        import { getFirestore, collection, addDoc, doc, getDoc, setDoc, updateDoc, deleteDoc, onSnapshot, serverTimestamp, query, orderBy, deleteField } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
+        import { getFirestore, collection, addDoc, doc, getDocs, setDoc, updateDoc, deleteDoc, onSnapshot, serverTimestamp, query, orderBy } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
         import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-storage.js";
 
         // CONFIG
@@ -593,9 +576,12 @@
         let currentModalVideos = [];
         let currentModalReviews = [];
         let currentModalModelInfo = [];
+        let currentModalNewBadge = null;
+        let keycrmProductSettings = {};
         let productMediaUnsubscribe = null;
         let productReviewsUnsubscribe = null;
         let productModelInfoUnsubscribe = null;
+        let productSettingsUnsubscribe = null;
         const MAX_VIDEO_SIZE_BYTES = 200 * 1024 * 1024;
 
         // UI HELPERS
@@ -683,7 +669,6 @@
         const initAdminPanel = () => {
             if (hasInitialized) return;
             hasInitialized = true;
-            loadSettings();
             // NOTE: "Список товарів" now browses the live KeyCRM catalog (see
             // loadKeycrmProductsList below), not the old Firestore "products"
             // collection. subscribeToProducts()/renderProductTable() below are
@@ -692,67 +677,6 @@
             loadKeycrmProductsList();
             subscribeToPromotions();
         };
-
-        // --- 1. SITE SETTINGS LOGIC ---
-        const loadSettings = async () => {
-            try {
-                const docRef = doc(db, "settings", "site_content");
-                const docSnap = await getDoc(docRef);
-                if (docSnap.exists()) {
-                    const data = docSnap.data();
-                    document.getElementById('logoText').value = data.logoText || '';
-                    document.getElementById('heroBackgroundUrl').value = data.heroBackgroundUrl || '';
-                    document.getElementById('heroTitle').value = data.heroTitle || '';
-                    document.getElementById('heroSubtitle').value = data.heroSubtitle || '';
-                    document.getElementById('heroDescription').value = data.heroDescription || '';
-                }
-            } catch (e) {
-                console.error("Error loading settings", e);
-            }
-        };
-
-        document.getElementById('saveSettingsBtn').addEventListener('click', async () => {
-            // The form loads blank when settings/site_content has no fields yet, so
-            // a stray save would write an empty logoText - which is the one setting
-            // the storefront renders without a fallback.
-            const logoTextEl = document.getElementById('logoText');
-            logoTextEl.classList.remove('border-red-500');
-            if (!logoTextEl.value.trim()) {
-                logoTextEl.classList.add('border-red-500');
-                showToast("Вкажіть назву бренду — вона показується в шапці й підвалі сайту", true);
-                return;
-            }
-
-            toggleLoading('saveSettingsBtn', true, 'Збереження');
-            try {
-                const shouldResetBg = document.getElementById('resetHeroBg').checked;
-
-                const data = {
-                    logoText: logoTextEl.value.trim(),
-                    heroTitle: document.getElementById('heroTitle').value,
-                    heroSubtitle: document.getElementById('heroSubtitle').value,
-                    heroDescription: document.getElementById('heroDescription').value,
-                    updatedAt: serverTimestamp()
-                };
-
-                if (shouldResetBg) {
-                    data.heroBackgroundUrl = deleteField();
-                    document.getElementById('heroBackgroundUrl').value = ""; // Clear input
-                    document.getElementById('resetHeroBg').checked = false; // Uncheck
-                } else {
-                    data.heroBackgroundUrl = document.getElementById('heroBackgroundUrl').value;
-                }
-
-                // Ensure merge: true to avoid overwriting existing fields
-                await setDoc(doc(db, "settings", "site_content"), data, { merge: true });
-                showToast("✅ Налаштування оновлено!");
-            } catch (e) {
-                console.error(e);
-                showToast("❌ Помилка збереження", true);
-            } finally {
-                toggleLoading('saveSettingsBtn', false, 'Зберегти налаштування');
-            }
-        });
 
         // --- 2. SIZE CHART BUILDER LOGIC ---
         const renderSizeChartTable = () => {
@@ -944,7 +868,7 @@
                     <td class="p-4">
                         <img src="${p.thumbnail_url || 'https://placehold.co/50'}" class="w-10 h-12 object-cover rounded bg-gray-200">
                     </td>
-                    <td class="p-4 font-medium">${p.name}</td>
+                    <td class="p-4 font-medium">${escapeHtml(p.name)}${isNewBadgeOn(keycrmProductSettings[String(p.id)]) ? '<span class="ml-2 align-middle bg-black text-white text-[10px] px-1 rounded">NEW</span>' : ''}</td>
                     <td class="p-4 text-gray-500 text-xs">${p.id}</td>
                     <td class="p-4">
                         ${price !== null ? `${price} грн` : '<span class="text-red-400 text-xs">перевірте офери</span>'}
@@ -959,7 +883,12 @@
 
         const loadKeycrmProductsList = async () => {
             try {
-                keycrmProducts = await fetchAllKeycrmProductsForAdmin();
+                const [products, settings] = await Promise.all([
+                    fetchAllKeycrmProductsForAdmin(),
+                    loadAllProductSettings(),
+                ]);
+                keycrmProducts = products;
+                keycrmProductSettings = settings;
                 renderKeycrmProductsTable();
             } catch (err) {
                 console.error(err);
@@ -1348,6 +1277,73 @@
             });
         };
 
+        // --- NEW BADGE (productSettings/{keycrmId}.newBadge) ---
+        // Fully manual: there is no "new for N days" rule any more. Keep this
+        // predicate identical to isNewBadgeVisible in services/productSettings.ts.
+        const todayIso = () => {
+            const d = new Date();
+            const pad = (n) => String(n).padStart(2, '0');
+            return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+        };
+
+        const isNewBadgeOn = (settings) => {
+            const badge = settings && settings.newBadge;
+            if (!badge || badge.enabled !== true) return false;
+            if (!badge.until) return true;
+            return todayIso() <= badge.until;
+        };
+
+        // One read for the whole collection so the product list can show a NEW
+        // label per row without a document read per product.
+        const loadAllProductSettings = async () => {
+            const out = {};
+            try {
+                const snap = await getDocs(collection(db, 'productSettings'));
+                snap.docs.forEach(d => { out[d.id] = d.data(); });
+            } catch (err) {
+                console.error(err);
+            }
+            return out;
+        };
+
+        const renderModalNewBadge = () => {
+            const badge = currentModalNewBadge || {};
+            document.getElementById('modalNewBadgeEnabled').checked = badge.enabled === true;
+            document.getElementById('modalNewBadgeUntil').value = badge.until || '';
+        };
+
+        const saveModalNewBadge = async () => {
+            if (!currentModalProductId) return;
+
+            const enabled = document.getElementById('modalNewBadgeEnabled').checked;
+            const untilEl = document.getElementById('modalNewBadgeUntil');
+            const until = untilEl.value;
+
+            untilEl.classList.remove('border-red-500');
+            if (until && until < todayIso()) {
+                untilEl.classList.add('border-red-500');
+                showToast("Дата вже минула — бейдж не показуватиметься", true);
+                return;
+            }
+
+            const newBadge = enabled ? { enabled: true, ...(until ? { until } : {}) } : { enabled: false };
+
+            toggleLoading('modalSaveNewBadgeBtn', true, 'Збереження');
+            try {
+                await setDoc(doc(db, 'productSettings', String(currentModalProductId)), { newBadge }, { merge: true });
+                keycrmProductSettings[String(currentModalProductId)] = { ...(keycrmProductSettings[String(currentModalProductId)] || {}), newBadge };
+                renderKeycrmProductsTable();
+                showToast(enabled ? "Бейдж NEW увімкнено" : "Бейдж NEW вимкнено");
+            } catch (err) {
+                console.error(err);
+                showToast("Помилка збереження бейджа", true);
+            } finally {
+                toggleLoading('modalSaveNewBadgeBtn', false, 'Зберегти бейдж');
+            }
+        };
+
+        document.getElementById('modalSaveNewBadgeBtn').addEventListener('click', saveModalNewBadge);
+
         // --- MODEL INFO PER PHOTO (productModelInfo/{keycrmId}.photos[]) ---
         // Entries are keyed by photo URL rather than gallery index because KeyCRM
         // can reorder or replace attachments at any time. App.tsx must derive its
@@ -1709,6 +1705,13 @@
                 document.getElementById('modalReviewsList').innerHTML = '<p class="text-xs text-red-500">Помилка завантаження відгуків</p>';
             });
 
+            if (productSettingsUnsubscribe) productSettingsUnsubscribe();
+            productSettingsUnsubscribe = onSnapshot(doc(db, 'productSettings', String(productId)), (snap) => {
+                const data = snap.exists() ? snap.data() : {};
+                currentModalNewBadge = data.newBadge || null;
+                renderModalNewBadge();
+            }, (err) => console.error(err));
+
             if (productModelInfoUnsubscribe) productModelInfoUnsubscribe();
             productModelInfoUnsubscribe = onSnapshot(doc(db, 'productModelInfo', String(productId)), (snap) => {
                 const data = snap.exists() ? snap.data() : {};
@@ -1734,11 +1737,16 @@
                 productModelInfoUnsubscribe();
                 productModelInfoUnsubscribe = null;
             }
+            if (productSettingsUnsubscribe) {
+                productSettingsUnsubscribe();
+                productSettingsUnsubscribe = null;
+            }
             currentModalProductId = null;
             currentModalPhotos = [];
             currentModalVideos = [];
             currentModalReviews = [];
             currentModalModelInfo = [];
+            currentModalNewBadge = null;
             document.getElementById('modalPhotoInput').value = '';
             document.getElementById('modalVideoInput').value = '';
             document.getElementById('modalReviewUser').value = '';

@@ -67,6 +67,15 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // Per-product editorial flags keyed by KeyCRM product id - currently the
+    // manual NEW badge, later visibility and the size-chart override. One
+    // collection for all the small scalars so the storefront doesn't pay for
+    // another full read per feature. Read publicly by App.tsx; only admins write.
+    match /productSettings/{productId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
     // Everything else stays locked down.
     match /{document=**} {
       allow read, write: if false;

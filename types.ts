@@ -21,6 +21,17 @@ export interface PhotoModelInfo {
   note?: string;
 }
 
+// Editorial flags the admin sets per product (productSettings/{keycrmId}).
+// The NEW badge is entirely manual - there is no automatic "recently added"
+// rule any more, because upload date turned out to be a poor proxy for what
+// the shop actually wants to promote.
+export interface ProductSettings {
+  newBadge?: {
+    enabled: boolean;
+    until?: string; // YYYY-MM-DD; absent means "until switched off"
+  };
+}
+
 export interface SizeChartRow {
   size: string;
   bust: string;
@@ -59,7 +70,7 @@ export interface Product {
   categoryId?: number | null; // KeyCRM category_id, used for catalog filter buttons
   description?: string; // sanitized KeyCRM description (see services/keycrm.ts)
   oldPrice?: number;
-  isNew?: boolean; // New field for "NEW" status
+  isNew?: boolean; // NEW badge, set from productSettings (see services/productSettings.ts)
   badgeText?: string; // Custom promo badge (e.g. "-20%", "Чорна п'ятниця")
   images: string[];
   sizes: string[];

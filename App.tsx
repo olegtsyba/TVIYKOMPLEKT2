@@ -2,8 +2,6 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import ReactDOM from 'react-dom/client';
 import { PRODUCTS, CATEGORIES, SIZE_CHARTS, DEFAULT_PRODUCT_DESCRIPTION, COLOR_HEX } from './constants';
 import { Product, CartItem, SiteSettings, Review, SizeChartRow } from './types';
-import { doc, getDoc } from 'firebase/firestore';
-import { db } from './firebase';
 import {
   fetchAllKeycrmProducts, fetchOffersForProduct, mapKeycrmProduct, deriveVariants,
   fetchAllKeycrmOffers, deriveVariantsByProduct, readCachedOfferVariants, writeCachedOfferVariants, sizeSortKey,
@@ -13,6 +11,7 @@ import { fetchActivePromotions, applyPromotion } from './services/promotions';
 import { fetchProductMediaMap, applyProductMedia } from './services/productMedia';
 import { fetchProductReviewsMap, applyProductReviews } from './services/productReviews';
 import { fetchProductModelInfoMap, applyProductModelInfo, normalizePhotoUrl } from './services/productModelInfo';
+import { fetchProductSettingsMap, applyProductSettings } from './services/productSettings';
 import CatalogFilters from './components/CatalogFilters';
 
 // Icons using SVG components
@@ -104,7 +103,9 @@ interface LightboxItem {
 export default function App() {
   // Data State
   const [allProducts, setAllProducts] = useState<Product[]>([]);
-  const [siteSettings, setSiteSettings] = useState<SiteSettings>(DEFAULT_SETTINGS);
+  // Hero copy and the brand name are code-owned; the admin no longer edits them,
+  // so there is nothing to read from Firestore here.
+  const siteSettings: SiteSettings = DEFAULT_SETTINGS;
   const [isLoading, setIsLoading] = useState(true);
 
   // UI State
@@ -180,38 +181,15 @@ export default function App() {
       try {
         setIsLoading(true);
         
-        // 1. Fetch Site Settings
+        // Fetch Products from KeyCRM (catalog) + Firestore (point discounts)
         try {
-          const settingsRef = doc(db, "settings", "site_content");
-          const settingsSnap = await getDoc(settingsRef);
-          if (settingsSnap.exists()) {
-             // Logic to handle potential reset of background URL
-            const data = settingsSnap.data();
-            const finalSettings = { 
-                ...DEFAULT_SETTINGS, 
-                ...data,
-                // Ensure if heroBackgroundUrl was deleted (undefined), we use the default
-                heroBackgroundUrl: data.heroBackgroundUrl || DEFAULT_SETTINGS.heroBackgroundUrl,
-                heroDescription: data.heroDescription || DEFAULT_SETTINGS.heroDescription,
-                // Unlike the hero fields, logoText has no fallback at its three
-                // render sites (header, footer heading, copyright), so an empty
-                // value here would blank the brand name site-wide.
-                logoText: data.logoText || DEFAULT_SETTINGS.logoText
-            };
-            setSiteSettings(finalSettings as SiteSettings);
-          }
-        } catch (err) {
-          console.warn("Could not fetch site settings, using defaults", err);
-        }
-
-        // 2. Fetch Products from KeyCRM (catalog) + Firestore (point discounts)
-        try {
-          const [kcProducts, promotions, productMedia, productReviews, productModelInfo] = await Promise.all([
+          const [kcProducts, promotions, productMedia, productReviews, productModelInfo, productSettings] = await Promise.all([
             fetchAllKeycrmProducts(),
             fetchActivePromotions(),
             fetchProductMediaMap(),
             fetchProductReviewsMap(),
             fetchProductModelInfoMap(),
+            fetchProductSettingsMap(),
           ]);
 
           const products = kcProducts
@@ -225,7 +203,8 @@ export default function App() {
             let out = applyPromotion(p, promotions.get(id));
             out = applyProductMedia(out, productMedia.get(id));
             out = applyProductReviews(out, productReviews.get(id));
-            return applyProductModelInfo(out, productModelInfo.get(id));
+            out = applyProductModelInfo(out, productModelInfo.get(id));
+            return applyProductSettings(out, productSettings.get(id));
           };
           setAllProducts(products.map(withOverlays));
 
