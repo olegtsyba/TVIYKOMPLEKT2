@@ -388,6 +388,16 @@
             </div>
 
             <div class="p-6 border-t border-gray-200">
+                <h3 class="text-xs font-bold uppercase text-gray-500 mb-1">Інфо про модель на фото</h3>
+                <p class="text-xs text-gray-400 mb-3">Показується плашкою в нижньому куті фото на сайті. Зріст і розмір обов'язкові, решта — за бажанням.</p>
+                <div id="modalModelInfoGrid" class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
+                    <p class="col-span-full text-xs text-gray-400 italic">Завантаження...</p>
+                </div>
+                <div id="modalModelInfoOrphans" class="mb-4"></div>
+                <button type="button" id="modalSaveModelInfoBtn" class="w-full bg-gray-800 text-white px-4 py-2 text-xs uppercase font-bold rounded hover:bg-black flex justify-center items-center">Зберегти інфо про модель</button>
+            </div>
+
+            <div class="p-6 border-t border-gray-200">
                 <h3 class="text-xs font-bold uppercase text-gray-500 mb-1">Відео-огляди</h3>
                 <p class="text-xs text-gray-400 mb-3">Формати mp4/mov/webm, до 200 МБ на файл.</p>
                 <div id="modalVideosGrid" class="grid grid-cols-2 md:grid-cols-3 gap-2 mb-4">
@@ -566,8 +576,10 @@
         let currentModalPhotos = [];
         let currentModalVideos = [];
         let currentModalReviews = [];
+        let currentModalModelInfo = [];
         let productMediaUnsubscribe = null;
         let productReviewsUnsubscribe = null;
+        let productModelInfoUnsubscribe = null;
         const MAX_VIDEO_SIZE_BYTES = 200 * 1024 * 1024;
 
         // UI HELPERS
@@ -1254,6 +1266,215 @@
             });
         };
 
+        // --- MODEL INFO PER PHOTO (productModelInfo/{keycrmId}.photos[]) ---
+        // Entries are keyed by photo URL rather than gallery index because KeyCRM
+        // can reorder or replace attachments at any time. App.tsx must derive its
+        // lookup key the same way - keep normalizePhotoUrl identical to its twin
+        // in services/productModelInfo.ts or the two sides silently stop matching.
+        const normalizePhotoUrl = (url) => String(url || '').split(',')[0].trim();
+
+        const MODEL_INFO_SIZES = ['XS', 'S', 'M', 'L', 'XL', 'XXL'];
+        const MODEL_INFO_NOTE_MAX = 150;
+
+        // Exactly what the storefront gallery renders, in the same order: KeyCRM
+        // attachments first, admin-uploaded productMedia photos appended after.
+        // attachments_data already sits in keycrmProducts, so no extra API call.
+        const getModalGalleryUrls = () => {
+            const product = keycrmProducts.find(p => p.id === currentModalProductId);
+            // Mirrors mapKeycrmProduct in services/keycrm.ts, including its
+            // thumbnail_url fallback - the two lists must stay identical.
+            const attachments = (product && Array.isArray(product.attachments_data)) ? product.attachments_data : [];
+            const keycrmUrls = attachments.length > 0
+                ? attachments
+                : ((product && product.thumbnail_url) ? [product.thumbnail_url] : []);
+            const out = [];
+            [...keycrmUrls, ...currentModalPhotos.map(p => p.url)].forEach(raw => {
+                const url = normalizePhotoUrl(raw);
+                if (url && !out.includes(url)) out.push(url);
+            });
+            return out;
+        };
+
+        const applyModelInfoToAllPhotos = (sourceCard) => {
+            const selectors = ['.mi-height', '.mi-size', '.mi-bust', '.mi-waist', '.mi-hips', '.mi-note'];
+            const values = {};
+            selectors.forEach(sel => { values[sel] = sourceCard.querySelector(sel).value; });
+
+            const cards = Array.from(document.querySelectorAll('#modalModelInfoGrid [data-url]'));
+            cards.forEach(card => {
+                if (card === sourceCard) return;
+                selectors.forEach(sel => { card.querySelector(sel).value = values[sel]; });
+                card.querySelector('.mi-on').checked = true;
+                card.querySelector('.mi-fields').classList.remove('hidden');
+                card.querySelector('.mi-counter').innerText = `${values['.mi-note'].length}/${MODEL_INFO_NOTE_MAX}`;
+            });
+            showToast(`Застосовано до ${Math.max(cards.length - 1, 0)} фото. Не забудьте зберегти.`);
+        };
+
+        const renderModalModelInfo = () => {
+            const grid = document.getElementById('modalModelInfoGrid');
+            const orphansBox = document.getElementById('modalModelInfoOrphans');
+            const urls = getModalGalleryUrls();
+            const byUrl = new Map(currentModalModelInfo.map(e => [normalizePhotoUrl(e.url), e]));
+
+            grid.innerHTML = '';
+            if (urls.length === 0) {
+                grid.innerHTML = '<p class="col-span-full text-xs text-gray-400 italic">У цього товару немає фото</p>';
+            }
+
+            urls.forEach(url => {
+                const info = byUrl.get(url);
+                const on = !!info;
+                const card = document.createElement('div');
+                card.className = 'border border-gray-200 rounded p-2 flex gap-2';
+                card.dataset.url = url;
+                card.innerHTML = `
+                    <img src="${escapeHtml(url)}" class="w-14 h-[4.5rem] object-cover rounded bg-gray-100 flex-shrink-0">
+                    <div class="flex-1 min-w-0">
+                        <label class="flex items-center gap-2 text-xs font-bold cursor-pointer">
+                            <input type="checkbox" class="mi-on" ${on ? 'checked' : ''}>
+                            Показувати інфо про модель
+                        </label>
+                        <div class="mi-fields mt-2 space-y-2 ${on ? '' : 'hidden'}">
+                            <div class="grid grid-cols-2 gap-2">
+                                <input type="number" min="100" max="250" step="1" class="mi-height text-xs p-2 border rounded w-full" placeholder="Зріст, см *" value="${info && info.height != null ? escapeHtml(String(info.height)) : ''}">
+                                <select class="mi-size text-xs p-2 border rounded w-full">
+                                    <option value="">Розмір *</option>
+                                    ${MODEL_INFO_SIZES.map(s => `<option value="${s}" ${info && info.size === s ? 'selected' : ''}>${s}</option>`).join('')}
+                                </select>
+                            </div>
+                            <div class="grid grid-cols-3 gap-2">
+                                <input type="number" min="30" max="200" step="1" class="mi-bust text-xs p-2 border rounded w-full" placeholder="Груди" value="${info && info.bust != null ? escapeHtml(String(info.bust)) : ''}">
+                                <input type="number" min="30" max="200" step="1" class="mi-waist text-xs p-2 border rounded w-full" placeholder="Талія" value="${info && info.waist != null ? escapeHtml(String(info.waist)) : ''}">
+                                <input type="number" min="30" max="200" step="1" class="mi-hips text-xs p-2 border rounded w-full" placeholder="Стегна" value="${info && info.hips != null ? escapeHtml(String(info.hips)) : ''}">
+                            </div>
+                            <textarea class="mi-note w-full text-xs p-2 border rounded h-14" maxlength="${MODEL_INFO_NOTE_MAX}" placeholder="Примітка (необов'язково)">${escapeHtml(info && info.note ? info.note : '')}</textarea>
+                            <div class="flex justify-between items-center gap-2">
+                                <span class="mi-counter text-[10px] text-gray-400"></span>
+                                <button type="button" class="mi-apply-all text-[10px] uppercase font-bold text-blue-600 hover:text-black">Застосувати до всіх фото</button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                grid.appendChild(card);
+
+                const checkbox = card.querySelector('.mi-on');
+                const fields = card.querySelector('.mi-fields');
+                const note = card.querySelector('.mi-note');
+                const counter = card.querySelector('.mi-counter');
+                const updateCounter = () => { counter.innerText = `${note.value.length}/${MODEL_INFO_NOTE_MAX}`; };
+
+                checkbox.addEventListener('change', () => fields.classList.toggle('hidden', !checkbox.checked));
+                note.addEventListener('input', updateCounter);
+                card.querySelector('.mi-apply-all').addEventListener('click', () => applyModelInfoToAllPhotos(card));
+                updateCounter();
+            });
+
+            const galleryUrls = new Set(urls);
+            const orphans = currentModalModelInfo.filter(e => !galleryUrls.has(normalizePhotoUrl(e.url)));
+            orphansBox.innerHTML = '';
+            if (orphans.length === 0) return;
+
+            orphansBox.innerHTML = `
+                <div class="bg-amber-50 border border-amber-200 rounded p-3">
+                    <p class="text-xs font-bold text-amber-800 mb-1">Інфо для фото, яких більше немає (${orphans.length})</p>
+                    <p class="text-[10px] text-amber-700 mb-2">Фото замінили або видалили в KeyCRM. На сайті ці записи не показуються.</p>
+                    <div class="space-y-1" id="modalModelInfoOrphanList"></div>
+                </div>
+            `;
+            const list = orphansBox.querySelector('#modalModelInfoOrphanList');
+            orphans.forEach(entry => {
+                const url = normalizePhotoUrl(entry.url);
+                const row = document.createElement('div');
+                row.className = 'flex justify-between items-center gap-2 text-[10px] text-amber-900';
+                row.innerHTML = `
+                    <span class="truncate">${escapeHtml(url)} — ${escapeHtml(String(entry.height ?? '?'))} см, ${escapeHtml(String(entry.size ?? '?'))}</span>
+                    <button type="button" class="text-red-600 hover:text-red-800 font-bold flex-shrink-0">Видалити</button>
+                `;
+                row.querySelector('button').addEventListener('click', () => deleteOrphanModelInfo(url));
+                list.appendChild(row);
+            });
+        };
+
+        const deleteOrphanModelInfo = async (url) => {
+            if (!currentModalProductId) return;
+            if (!confirm("Видалити інфо для цього фото?")) return;
+
+            const updated = currentModalModelInfo.filter(e => normalizePhotoUrl(e.url) !== url);
+            try {
+                await setDoc(doc(db, 'productModelInfo', String(currentModalProductId)), { photos: updated }, { merge: true });
+                showToast("Запис видалено");
+            } catch (err) {
+                console.error(err);
+                showToast("Помилка видалення", true);
+            }
+        };
+
+        const saveModalModelInfo = async () => {
+            if (!currentModalProductId) return;
+
+            const cards = Array.from(document.querySelectorAll('#modalModelInfoGrid [data-url]'));
+            cards.forEach(card => {
+                card.querySelector('.mi-height').classList.remove('border-red-500');
+                card.querySelector('.mi-size').classList.remove('border-red-500');
+            });
+
+            const toInt = (value) => {
+                const parsed = parseInt(value, 10);
+                return Number.isFinite(parsed) ? parsed : null;
+            };
+
+            const photos = [];
+            for (const card of cards) {
+                if (!card.querySelector('.mi-on').checked) continue;
+
+                const heightEl = card.querySelector('.mi-height');
+                const sizeEl = card.querySelector('.mi-size');
+                const height = toInt(heightEl.value);
+                const size = sizeEl.value;
+
+                if (height === null || !size) {
+                    if (height === null) heightEl.classList.add('border-red-500');
+                    if (!size) sizeEl.classList.add('border-red-500');
+                    showToast("Заповніть зріст і розмір для всіх увімкнених фото", true);
+                    return;
+                }
+                if (height < 100 || height > 250) {
+                    heightEl.classList.add('border-red-500');
+                    showToast("Зріст має бути від 100 до 250 см", true);
+                    return;
+                }
+
+                const entry = { url: card.dataset.url, height, size };
+                const bust = toInt(card.querySelector('.mi-bust').value);
+                const waist = toInt(card.querySelector('.mi-waist').value);
+                const hips = toInt(card.querySelector('.mi-hips').value);
+                const note = card.querySelector('.mi-note').value.trim();
+                if (bust !== null) entry.bust = bust;
+                if (waist !== null) entry.waist = waist;
+                if (hips !== null) entry.hips = hips;
+                if (note) entry.note = note.slice(0, MODEL_INFO_NOTE_MAX);
+                photos.push(entry);
+            }
+
+            // Orphans have their own delete button - a save must not silently drop them.
+            const galleryUrls = new Set(getModalGalleryUrls());
+            const orphans = currentModalModelInfo.filter(e => !galleryUrls.has(normalizePhotoUrl(e.url)));
+
+            toggleLoading('modalSaveModelInfoBtn', true, 'Збереження');
+            try {
+                await setDoc(doc(db, 'productModelInfo', String(currentModalProductId)), { photos: [...photos, ...orphans] }, { merge: true });
+                showToast("Інфо про модель збережено");
+            } catch (err) {
+                console.error(err);
+                showToast("Помилка збереження інфо про модель", true);
+            } finally {
+                toggleLoading('modalSaveModelInfoBtn', false, 'Зберегти інфо про модель');
+            }
+        };
+
+        document.getElementById('modalSaveModelInfoBtn').addEventListener('click', saveModalModelInfo);
+
         window.deleteModalReview = async (idx) => {
             const review = currentModalReviews[idx];
             if (!review || !currentModalProductId) return;
@@ -1358,6 +1579,8 @@
             document.getElementById('modalPhotosGrid').innerHTML = '<p class="col-span-full text-xs text-gray-400 italic">Завантаження...</p>';
             document.getElementById('modalVideosGrid').innerHTML = '<p class="col-span-full text-xs text-gray-400 italic">Завантаження...</p>';
             document.getElementById('modalReviewsList').innerHTML = '<p class="text-xs text-gray-400 italic">Завантаження...</p>';
+            document.getElementById('modalModelInfoGrid').innerHTML = '<p class="col-span-full text-xs text-gray-400 italic">Завантаження...</p>';
+            document.getElementById('modalModelInfoOrphans').innerHTML = '';
             document.getElementById('modalReviewDate').value = new Date().toISOString().slice(0, 10);
 
             if (productMediaUnsubscribe) productMediaUnsubscribe();
@@ -1367,6 +1590,8 @@
                 currentModalVideos = Array.isArray(data.videos) ? data.videos : [];
                 renderModalPhotos();
                 renderModalVideos();
+                // The gallery list this section renders includes productMedia photos.
+                renderModalModelInfo();
             }, (err) => {
                 console.error(err);
                 document.getElementById('modalPhotosGrid').innerHTML = '<p class="col-span-full text-xs text-red-500">Помилка завантаження фото</p>';
@@ -1382,6 +1607,16 @@
                 console.error(err);
                 document.getElementById('modalReviewsList').innerHTML = '<p class="text-xs text-red-500">Помилка завантаження відгуків</p>';
             });
+
+            if (productModelInfoUnsubscribe) productModelInfoUnsubscribe();
+            productModelInfoUnsubscribe = onSnapshot(doc(db, 'productModelInfo', String(productId)), (snap) => {
+                const data = snap.exists() ? snap.data() : {};
+                currentModalModelInfo = Array.isArray(data.photos) ? data.photos : [];
+                renderModalModelInfo();
+            }, (err) => {
+                console.error(err);
+                document.getElementById('modalModelInfoGrid').innerHTML = '<p class="col-span-full text-xs text-red-500">Помилка завантаження інфо про модель</p>';
+            });
         };
 
         window.closeProductModal = () => {
@@ -1394,10 +1629,15 @@
                 productReviewsUnsubscribe();
                 productReviewsUnsubscribe = null;
             }
+            if (productModelInfoUnsubscribe) {
+                productModelInfoUnsubscribe();
+                productModelInfoUnsubscribe = null;
+            }
             currentModalProductId = null;
             currentModalPhotos = [];
             currentModalVideos = [];
             currentModalReviews = [];
+            currentModalModelInfo = [];
             document.getElementById('modalPhotoInput').value = '';
             document.getElementById('modalVideoInput').value = '';
             document.getElementById('modalReviewUser').value = '';
