@@ -376,7 +376,7 @@
                     <label class="flex items-center gap-2 text-xs font-bold">
                         Бейдж
                         <select id="modalBadgeType" class="text-xs p-2 border rounded font-normal">
-                            <option value="">немає</option>
+                            <option value="">— без бейджа —</option>
                             <option value="new">NEW</option>
                             <option value="hit">ХІТ</option>
                             <option value="limited">LIMITED</option>
@@ -389,6 +389,31 @@
                     </label>
                     <span class="text-[10px] text-gray-400">порожня дата — доки не вимкнути</span>
                     <button type="button" id="modalSaveBadgeBtn" class="ml-auto bg-gray-800 text-white px-4 py-2 text-xs uppercase font-bold rounded hover:bg-black flex justify-center items-center">Зберегти бейдж</button>
+                </div>
+            </div>
+
+            <div class="p-6 border-t border-gray-200">
+                <h3 class="text-xs font-bold uppercase text-gray-500 mb-1">Статус наявності</h3>
+                <p class="text-xs text-gray-400 mb-3">Керує плашкою й кнопкою на сайті. «В наявності» нічого не показує.</p>
+                <div class="bg-gray-50 border border-gray-200 p-4 rounded flex flex-wrap items-center gap-4">
+                    <label class="flex items-center gap-2 text-xs font-bold">
+                        Статус
+                        <select id="modalAvailabilityStatus" class="text-xs p-2 border rounded font-normal">
+                            <option value="in_stock">В наявності</option>
+                            <option value="out_of_stock">Немає в наявності</option>
+                            <option value="expected">Очікується</option>
+                            <option value="preorder">Передзамовлення</option>
+                        </select>
+                    </label>
+                    <label class="flex items-center gap-2 text-xs text-gray-600" id="modalAvailabilityDateWrap">
+                        Очікується з
+                        <input type="date" id="modalAvailabilityDate" class="text-xs p-2 border rounded">
+                    </label>
+                    <label class="flex items-center gap-2 text-xs text-gray-600" id="modalAvailabilityLeadWrap">
+                        Термін відправки
+                        <input type="text" id="modalAvailabilityLeadTime" maxlength="40" placeholder="напр. 7–10 днів" class="text-xs p-2 border rounded">
+                    </label>
+                    <button type="button" id="modalSaveAvailabilityBtn" class="ml-auto bg-gray-800 text-white px-4 py-2 text-xs uppercase font-bold rounded hover:bg-black flex justify-center items-center">Зберегти статус</button>
                 </div>
             </div>
 
@@ -874,7 +899,15 @@
                     <td class="p-4">
                         <img src="${p.thumbnail_url || 'https://placehold.co/50'}" class="w-10 h-12 object-cover rounded bg-gray-200">
                     </td>
-                    <td class="p-4 font-medium">${escapeHtml(p.name)}${(() => { const b = visibleBadge(keycrmProductSettings[String(p.id)]); return b ? `<span class="ml-2 align-middle bg-black text-white text-[10px] px-1 rounded">${BADGE_LABELS[b.type]}</span>` : ''; })()}</td>
+                    <td class="p-4 font-medium">${escapeHtml(p.name)}${(() => {
+                        const st = keycrmProductSettings[String(p.id)];
+                        const b = visibleBadge(st);
+                        const a = readAvailability(st);
+                        let out = '';
+                        if (b) out += `<span class="ml-2 align-middle bg-black text-white text-[10px] px-1 rounded">${BADGE_LABELS[b.type]}</span>`;
+                        if (a) out += `<span class="ml-2 align-middle bg-amber-100 text-amber-800 border border-amber-300 text-[10px] px-1 rounded">${AVAILABILITY_LABELS[a.status]}</span>`;
+                        return out;
+                    })()}</td>
                     <td class="p-4 text-gray-500 text-xs">${p.id}</td>
                     <td class="p-4">
                         ${price !== null ? `${price} грн` : '<span class="text-red-400 text-xs">перевірте офери</span>'}
@@ -1367,6 +1400,78 @@
 
         document.getElementById('modalSaveBadgeBtn').addEventListener('click', saveModalBadge);
 
+        // --- AVAILABILITY (productSettings/{keycrmId}.availability) ---
+        // Editorial, not stock-driven: KeyCRM `quantity` is unusable here. Step 6
+        // (manual products) reuses this same vocabulary, per variant.
+        const AVAILABILITY_LABELS = {
+            out_of_stock: 'НЕМАЄ В НАЯВНОСТІ',
+            expected: 'ОЧІКУЄТЬСЯ',
+            preorder: 'ПЕРЕДЗАМОВЛЕННЯ',
+        };
+
+        const readAvailability = (settings) => {
+            const a = settings && settings.availability;
+            if (!a || !a.status || a.status === 'in_stock') return null;
+            if (!AVAILABILITY_LABELS[a.status]) return null;
+            return { status: a.status, date: a.date || '', leadTime: a.leadTime || '' };
+        };
+
+        const syncAvailabilityFields = () => {
+            const status = document.getElementById('modalAvailabilityStatus').value;
+            document.getElementById('modalAvailabilityDateWrap').classList.toggle('hidden', status !== 'expected');
+            document.getElementById('modalAvailabilityLeadWrap').classList.toggle('hidden', status !== 'preorder');
+        };
+
+        const renderModalAvailability = () => {
+            const a = readAvailability(currentModalSettings) || { status: 'in_stock', date: '', leadTime: '' };
+            document.getElementById('modalAvailabilityStatus').value = a.status;
+            document.getElementById('modalAvailabilityDate').value = a.date;
+            document.getElementById('modalAvailabilityLeadTime').value = a.leadTime;
+            syncAvailabilityFields();
+        };
+
+        const saveModalAvailability = async () => {
+            if (!currentModalProductId) return;
+
+            const status = document.getElementById('modalAvailabilityStatus').value;
+            const dateEl = document.getElementById('modalAvailabilityDate');
+            const leadEl = document.getElementById('modalAvailabilityLeadTime');
+            dateEl.classList.remove('border-red-500');
+
+            if (status === 'expected' && dateEl.value && dateEl.value < todayIso()) {
+                dateEl.classList.add('border-red-500');
+                showToast("Дата вже минула", true);
+                return;
+            }
+
+            const availability = status === 'in_stock'
+                ? null
+                : {
+                    status,
+                    ...(status === 'expected' && dateEl.value ? { date: dateEl.value } : {}),
+                    ...(status === 'preorder' && leadEl.value.trim() ? { leadTime: leadEl.value.trim() } : {}),
+                  };
+
+            toggleLoading('modalSaveAvailabilityBtn', true, 'Збереження');
+            try {
+                const id = String(currentModalProductId);
+                await setDoc(doc(db, 'productSettings', id), { availability: availability || deleteField() }, { merge: true });
+                keycrmProductSettings[id] = { ...(keycrmProductSettings[id] || {}) };
+                if (availability) keycrmProductSettings[id].availability = availability;
+                else delete keycrmProductSettings[id].availability;
+                renderKeycrmProductsTable();
+                showToast(availability ? `Статус: ${AVAILABILITY_LABELS[status]}` : "Статус: в наявності");
+            } catch (err) {
+                console.error(err);
+                showToast("Помилка збереження статусу", true);
+            } finally {
+                toggleLoading('modalSaveAvailabilityBtn', false, 'Зберегти статус');
+            }
+        };
+
+        document.getElementById('modalAvailabilityStatus').addEventListener('change', syncAvailabilityFields);
+        document.getElementById('modalSaveAvailabilityBtn').addEventListener('click', saveModalAvailability);
+
         // --- MODEL INFO PER PHOTO (productModelInfo/{keycrmId}.photos[]) ---
         // Entries are keyed by photo URL rather than gallery index because KeyCRM
         // can reorder or replace attachments at any time. App.tsx must derive its
@@ -1733,6 +1838,7 @@
                 const data = snap.exists() ? snap.data() : {};
                 currentModalSettings = data;
                 renderModalBadge();
+                renderModalAvailability();
             }, (err) => console.error(err));
 
             if (productModelInfoUnsubscribe) productModelInfoUnsubscribe();

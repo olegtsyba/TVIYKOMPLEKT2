@@ -28,12 +28,24 @@ export interface MarketingBadge {
   until?: string; // YYYY-MM-DD; absent means "until switched off"
 }
 
+// Availability is editorial, not stock-driven: KeyCRM's `quantity` is unusable
+// here (most live offers sit at <= 0 while selling), so a manager sets it.
+// Manual products in step 6 reuse this same vocabulary per variant.
+export type AvailabilityStatus = 'in_stock' | 'out_of_stock' | 'expected' | 'preorder';
+
+export interface ProductAvailability {
+  status: AvailabilityStatus;
+  date?: string;     // YYYY-MM-DD, 'expected' only - when it lands
+  leadTime?: string; // free text, 'preorder' only - e.g. "7-10 днів"
+}
+
 // Editorial flags the admin sets per product (productSettings/{keycrmId}).
 // The badge is entirely manual - there is no automatic "recently added" rule
 // any more, because upload date turned out to be a poor proxy for what the
 // shop actually wants to promote.
 export interface ProductSettings {
   badge?: MarketingBadge;
+  availability?: ProductAvailability;
 }
 
 export interface SizeChartRow {
@@ -74,7 +86,8 @@ export interface Product {
   categoryId?: number | null; // KeyCRM category_id, used for catalog filter buttons
   description?: string; // sanitized KeyCRM description (see services/keycrm.ts)
   oldPrice?: number;
-  marketingBadge?: MarketingBadge; // set from productSettings (see services/productSettings.ts)
+  marketingBadge?: MarketingBadge;     // set from productSettings (see services/productSettings.ts)
+  availability?: ProductAvailability;  // absent means in stock
   badgeText?: string; // Custom promo badge (e.g. "-20%", "Чорна п'ятниця")
   images: string[];
   sizes: string[];

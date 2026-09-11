@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import ReactDOM from 'react-dom/client';
 import { PRODUCTS, CATEGORIES, SIZE_CHARTS, DEFAULT_PRODUCT_DESCRIPTION, COLOR_HEX } from './constants';
-import { Product, CartItem, SiteSettings, Review, SizeChartRow, BadgeType } from './types';
+import { Product, CartItem, SiteSettings, Review, SizeChartRow } from './types';
 import {
   fetchAllKeycrmProducts, fetchOffersForProduct, mapKeycrmProduct, deriveVariants,
   fetchAllKeycrmOffers, deriveVariantsByProduct, readCachedOfferVariants, writeCachedOfferVariants, sizeSortKey,
@@ -11,7 +11,7 @@ import { fetchActivePromotions, applyPromotion } from './services/promotions';
 import { fetchProductMediaMap, applyProductMedia } from './services/productMedia';
 import { fetchProductReviewsMap, applyProductReviews } from './services/productReviews';
 import { fetchProductModelInfoMap, applyProductModelInfo, normalizePhotoUrl } from './services/productModelInfo';
-import { fetchProductSettingsMap, applyProductSettings, BADGE_LABELS } from './services/productSettings';
+import { fetchProductSettingsMap, applyProductSettings, resolveCardLabel, isPreorder, isPurchasable } from './services/productSettings';
 import CatalogFilters from './components/CatalogFilters';
 
 // Icons using SVG components
@@ -94,15 +94,10 @@ const FOOTER_INFO_CONTENT: Record<FooterInfoKey, { title: string; paragraphs: st
   },
 };
 
-// Monochrome by design - these sit next to the red SALE badge and must not turn
-// the card into a sticker wall. Same geometry throughout; only the fill differs,
-// so the four types stay distinguishable without colour.
-const BADGE_STYLES: Record<BadgeType, string> = {
-  new: 'bg-black text-white tracking-widest',
-  hit: 'bg-white text-black border border-black tracking-widest',
-  limited: 'bg-black text-white border border-white/40 tracking-[0.2em]',
-  back: 'bg-gray-200 text-gray-900 tracking-widest',
-};
+// One look for every editorial label - marketing badge or availability alike.
+// The red SALE badge is the only other label on a card and lives in the opposite
+// corner, so the card never stacks two plates in one place.
+const CARD_LABEL_CLASS = 'bg-black text-white text-[10px] font-bold px-2 py-1 uppercase tracking-widest shadow-sm';
 
 interface LightboxItem {
     type: 'image' | 'video';
@@ -575,6 +570,12 @@ export default function App() {
             size: item.selectedSize,
             color: item.selectedColor,
             price: item.price,
+            // Optional: the notification function ignores unknown fields, so an
+            // older deployed function still accepts this payload unchanged.
+            ...(isPreorder(item) ? { isPreorder: true } : {}),
+            ...(isPreorder(item) && item.availability?.leadTime
+              ? { preorderEta: item.availability.leadTime }
+              : {}),
           })),
           total: cartTotal,
         })
@@ -602,6 +603,22 @@ export default function App() {
     } catch (error) {
       showToast("❌ Помилка з'єднання.", "error");
     }
+  };
+
+  // The KeyCRM widget (index.html) renders its own launcher and does not document
+  // a public open() method, so try the plausible ones and otherwise point the
+  // shopper at the launcher rather than silently doing nothing.
+  const openKeycrmChat = () => {
+    const widget = (window as any).KeyCRM;
+    if (widget) {
+      for (const method of ['open', 'show', 'openChat', 'toggle']) {
+        if (typeof widget[method] === 'function') {
+          widget[method]();
+          return;
+        }
+      }
+    }
+    showToast("Напишіть нам у чат — кнопка в правому нижньому куті", "success");
   };
 
   // The chart is an inline accordion in the right-hand column - below the gallery
@@ -923,19 +940,18 @@ export default function App() {
                                     loading="lazy"
                                 />
                                 
-                                {/* Badges Container - Top Left Stacked */}
-                                <div className="absolute top-2 left-2 flex flex-col gap-1 items-start z-10">
-                                    {product.marketingBadge && (
-                                         <div className={`text-[10px] font-bold px-2 py-1 uppercase shadow-sm ${BADGE_STYLES[product.marketingBadge.type]}`}>
-                                            {BADGE_LABELS[product.marketingBadge.type]}
-                                         </div>
-                                    )}
-                                    {product.oldPrice && product.oldPrice > product.price && (
-                                        <div className="bg-red-600 text-white text-[10px] font-bold px-2 py-1 uppercase tracking-widest shadow-sm">
-                                            {product.badgeText || 'SALE'}
-                                        </div>
-                                    )}
-                                </div>
+                                {/* One editorial label top-left; the discount keeps the
+                                    opposite corner so the two never stack. */}
+                                {resolveCardLabel(product) && (
+                                    <div className={`absolute top-2 left-2 z-10 ${CARD_LABEL_CLASS}`}>
+                                        {resolveCardLabel(product)}
+                                    </div>
+                                )}
+                                {product.oldPrice && product.oldPrice > product.price && (
+                                    <div className="absolute top-2 right-2 z-10 bg-red-600 text-white text-[10px] font-bold px-2 py-1 uppercase tracking-widest shadow-sm">
+                                        {product.badgeText || 'SALE'}
+                                    </div>
+                                )}
                             </div>
                             <h3 className="text-xs uppercase tracking-wide text-gray-900 truncate mb-1 pr-2">{product.title}</h3>
                             <div className="flex items-center gap-2">
@@ -1254,7 +1270,18 @@ export default function App() {
                         {/* Info */}
                         <div className="w-full md:w-1/2 p-6 md:p-10 flex flex-col bg-white md:overflow-y-auto">
                             <div className="mb-6">
+                                {resolveCardLabel(selectedProduct) && (
+                                    <div className={`inline-block mb-2 ${CARD_LABEL_CLASS}`}>
+                                        {resolveCardLabel(selectedProduct)}
+                                    </div>
+                                )}
                                 <h2 className="font-serif text-2xl md:text-3xl mb-1 leading-tight">{selectedProduct.title}</h2>
+                                {selectedProduct.availability?.status === 'expected' && selectedProduct.availability.date && (
+                                    <p className="text-xs text-gray-500 mb-2">Очікується з {selectedProduct.availability.date}</p>
+                                )}
+                                {selectedProduct.availability?.status === 'preorder' && selectedProduct.availability.leadTime && (
+                                    <p className="text-xs text-gray-500 mb-2">Відправка: {selectedProduct.availability.leadTime}</p>
+                                )}
                                 <div className="flex items-center gap-2 mb-3">
                                     <div className="flex text-yellow-500 text-sm">
                                         {'★'.repeat(averageRating)}{'☆'.repeat(5-averageRating)}
@@ -1421,17 +1448,28 @@ export default function App() {
                             )}
 
                             {/* Buy Button */}
-                            <button
-                                onClick={() => addToCart(selectedProduct, selectedSizeForModal, selectedColorForModal)}
-                                disabled={!canAddToCart}
-                                className={`w-full py-4 uppercase tracking-widest text-sm font-bold transition-colors shadow-lg mb-6 ${
-                                    canAddToCart
-                                    ? 'bg-black text-white hover:bg-gray-800'
-                                    : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                                }`}
-                            >
-                                {hasValidPrice ? 'Додати в кошик' : 'Ціна уточнюється'}
-                            </button>
+                            {isPurchasable(selectedProduct) ? (
+                                <button
+                                    onClick={() => addToCart(selectedProduct, selectedSizeForModal, selectedColorForModal)}
+                                    disabled={!canAddToCart}
+                                    className={`w-full py-4 uppercase tracking-widest text-sm font-bold transition-colors shadow-lg mb-6 ${
+                                        canAddToCart
+                                        ? 'bg-black text-white hover:bg-gray-800'
+                                        : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                                    }`}
+                                >
+                                    {!hasValidPrice
+                                        ? 'Ціна уточнюється'
+                                        : isPreorder(selectedProduct) ? 'Передзамовити' : 'Додати в кошик'}
+                                </button>
+                            ) : (
+                                <button
+                                    onClick={openKeycrmChat}
+                                    className="w-full py-4 uppercase tracking-widest text-sm font-bold transition-colors shadow-lg mb-6 bg-black text-white hover:bg-gray-800"
+                                >
+                                    Дізнатись про надходження
+                                </button>
+                            )}
 
                             {/* Video Accordion */}
                             {selectedProduct.videoId && (

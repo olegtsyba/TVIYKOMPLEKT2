@@ -287,8 +287,26 @@ preview-домені.** Preview-канал віддає і сайт, і `admin.h
 
 **6a. Дані + каталог.** `manualProducts/{m_xxx}`: title, price, oldPrice,
 `categoryId` (число з KeyCRM-категорій, щоб фільтр і групи працювали однаково),
-description, images[], `status: 'draft' | 'announce' | 'selling'`,
-`variants[{ color, size, availability: 'in_stock' | 'preorder' | 'out_of_stock', preorderEta? }]`.
+description, images[], `status: 'draft' | 'announce' | 'selling'`, `variants[]`.
+
+**Статус наявності вже реалізований у Кроці 2 — перевикористати, не дублювати.**
+`types.ts` містить `AvailabilityStatus` (`in_stock | out_of_stock | expected |
+preorder`) і `ProductAvailability { status, date?, leadTime? }`, а
+`services/productSettings.ts` — `AVAILABILITY_LABELS`, `resolveCardLabel`,
+`isPurchasable`, `isPreorder`. Для товарів KeyCRM це поле рівня товару
+(`productSettings/{id}.availability`); для ручних товарів той самий обʼєкт лягає
+**в кожен елемент `variants[]`**:
+
+```
+variants: [{ color, size, availability: { status, date?, leadTime? } }]
+```
+
+Спільними лишаються словник статусів, підписи плашок, правило «одна плашка на
+картці, статус перебиває маркетинговий бейдж», вибір кнопки
+(`isPurchasable` / `isPreorder`) і позначка ПЕРЕДЗАМОВЛЕННЯ в заявці. Відрізняється
+лише рівень, на якому статус зберігається, тож у Кроці 6b достатньо звести
+варіант до одного `ProductAvailability` перед тим, як віддавати його в ці функції
+— переписувати рендер і кошик не доведеться.
 
 Кольори й розміри (рішення 3) — **тільки вибір зі списку, без вільного тексту**:
 кольори з тих, що вже є в каталозі (нормалізовані через `COLOR_ALIASES` у
