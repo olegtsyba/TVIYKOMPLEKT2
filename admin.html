@@ -39,6 +39,20 @@
     <!-- Notification Toast -->
     <!-- Must outrank every overlay, or showToast() fires behind them unseen:
          productModal is z-[70] and login-screen is z-50. -->
+    <!-- Confirm dialog. Outranks the toast (z-[100]) and the product modal
+         (z-[70]) because it can be opened from inside either. -->
+    <div id="confirmDialog" class="fixed inset-0 z-[110] hidden">
+        <div class="absolute inset-0 bg-black/60" data-confirm-backdrop></div>
+        <div class="relative bg-white w-[calc(100%-2rem)] max-w-sm mx-auto mt-40 rounded-lg shadow-2xl p-6" role="alertdialog" aria-modal="true" aria-labelledby="confirmDialogTitle" aria-describedby="confirmDialogText">
+            <p id="confirmDialogTitle" class="text-sm font-bold uppercase tracking-wider mb-2"></p>
+            <p id="confirmDialogText" class="text-sm text-gray-600 mb-6"></p>
+            <div class="flex justify-end gap-3">
+                <button type="button" id="confirmDialogCancel" class="px-4 py-2 text-xs uppercase font-bold rounded border border-gray-300 hover:bg-gray-50 focus:outline-none focus-visible:ring-1 focus-visible:ring-black">Скасувати</button>
+                <button type="button" id="confirmDialogOk" class="px-4 py-2 text-xs uppercase font-bold rounded text-white focus:outline-none focus-visible:ring-1 focus-visible:ring-black">Видалити</button>
+            </div>
+        </div>
+    </div>
+
     <div id="toast" class="fixed top-5 right-5 z-[100] transform translate-x-[calc(100%+1.25rem)] transition-transform duration-300">
         <div class="bg-black text-white px-6 py-4 shadow-lg rounded flex items-center gap-3">
             <i class="fas fa-info-circle"></i>
@@ -595,6 +609,61 @@
             setTimeout(() => toast.classList.add('translate-x-[calc(100%+1.25rem)]'), 3000);
         };
 
+        // Drop-in replacement for window.confirm, so destructive actions look like
+        // the rest of the admin instead of a browser chrome dialog. Returns a
+        // Promise<boolean>; every caller is already async.
+        const confirmDialog = (text, options = {}) => {
+            const {
+                title = 'Підтвердьте дію',
+                okLabel = 'Видалити',
+                cancelLabel = 'Скасувати',
+                danger = true,
+            } = options;
+
+            const root = document.getElementById('confirmDialog');
+            const okBtn = document.getElementById('confirmDialogOk');
+            const cancelBtn = document.getElementById('confirmDialogCancel');
+            const backdrop = root.querySelector('[data-confirm-backdrop]');
+
+            document.getElementById('confirmDialogTitle').innerText = title;
+            document.getElementById('confirmDialogText').innerText = text;
+            okBtn.innerText = okLabel;
+            cancelBtn.innerText = cancelLabel;
+            okBtn.className = `px-4 py-2 text-xs uppercase font-bold rounded text-white focus:outline-none focus-visible:ring-1 focus-visible:ring-black ${danger ? 'bg-red-600 hover:bg-red-700' : 'bg-gray-800 hover:bg-black'}`;
+
+            const previouslyFocused = document.activeElement;
+            root.classList.remove('hidden');
+            cancelBtn.focus();
+
+            return new Promise(resolve => {
+                const close = (result) => {
+                    root.classList.add('hidden');
+                    okBtn.removeEventListener('click', onOk);
+                    cancelBtn.removeEventListener('click', onCancel);
+                    backdrop.removeEventListener('click', onCancel);
+                    document.removeEventListener('keydown', onKey);
+                    if (previouslyFocused && previouslyFocused.focus) previouslyFocused.focus();
+                    resolve(result);
+                };
+                const onOk = () => close(true);
+                const onCancel = () => close(false);
+                const onKey = (e) => {
+                    if (e.key === 'Escape') {
+                        e.preventDefault();
+                        close(false);
+                    } else if (e.key === 'Enter') {
+                        e.preventDefault();
+                        close(true);
+                    }
+                };
+
+                okBtn.addEventListener('click', onOk);
+                cancelBtn.addEventListener('click', onCancel);
+                backdrop.addEventListener('click', onCancel);
+                document.addEventListener('keydown', onKey);
+            });
+        };
+
         const toggleLoading = (btnId, isLoading, text) => {
             const btn = document.getElementById(btnId);
             if(btn) {
@@ -1006,7 +1075,7 @@
 
         // Delete Function
         window.deleteProduct = async (id) => {
-            if (confirm("Ви впевнені? Це незворотньо.")) {
+            if (await confirmDialog("Ви впевнені? Це незворотньо.", { title: "Видалити товар" })) {
                 try {
                     await deleteDoc(doc(db, "products", id));
                     showToast("🗑 Товар видалено");
@@ -1176,7 +1245,7 @@
         };
 
         window.deletePromotion = async (docId) => {
-            if (confirm("Видалити знижку для артикулу " + docId + "?")) {
+            if (await confirmDialog(`Видалити знижку для артикулу ${docId}?`, { title: "Видалити знижку" })) {
                 try {
                     await deleteDoc(doc(db, "promotions", docId));
                     showToast("🗑 Знижку видалено");
@@ -1420,7 +1489,7 @@
 
         const deleteOrphanModelInfo = async (url) => {
             if (!currentModalProductId) return;
-            if (!confirm("Видалити інфо для цього фото?")) return;
+            if (!await confirmDialog("Видалити інфо про модель для цього фото?", { title: "Видалити інфо" })) return;
 
             const updated = currentModalModelInfo.filter(e => normalizePhotoUrl(e.url) !== url);
             try {
@@ -1510,7 +1579,7 @@
         window.deleteModalReview = async (idx) => {
             const review = currentModalReviews[idx];
             if (!review || !currentModalProductId) return;
-            if (!confirm("Видалити цей відгук?")) return;
+            if (!await confirmDialog("Видалити цей відгук?", { title: "Видалити відгук" })) return;
 
             if (review.storagePath) {
                 try {
@@ -1681,7 +1750,7 @@
         window.deleteModalPhoto = async (idx) => {
             const photo = currentModalPhotos[idx];
             if (!photo || !currentModalProductId) return;
-            if (!confirm("Видалити це фото?")) return;
+            if (!await confirmDialog("Видалити це фото?", { title: "Видалити фото" })) return;
 
             try {
                 await deleteObject(ref(storage, photo.storagePath));
@@ -1702,7 +1771,7 @@
         window.deleteModalVideo = async (idx) => {
             const video = currentModalVideos[idx];
             if (!video || !currentModalProductId) return;
-            if (!confirm("Видалити це відео?")) return;
+            if (!await confirmDialog("Видалити це відео?", { title: "Видалити відео" })) return;
 
             try {
                 await deleteObject(ref(storage, video.storagePath));
