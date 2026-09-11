@@ -49,6 +49,16 @@ service cloud.firestore {
       allow write: if request.auth != null;
     }
 
+    // Per-photo model measurements ("Зріст 168 см · розмір S"), keyed by
+    // KeyCRM product id; each entry inside is keyed by the photo URL, not by
+    // gallery index, since KeyCRM can reorder attachments. Read publicly by
+    // the storefront (App.tsx) to render the gallery overlay; only admin.html
+    // writes. Same pattern as productReviews above.
+    match /productModelInfo/{productId} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+
     // Everything else stays locked down.
     match /{document=**} {
       allow read, write: if false;
