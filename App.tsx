@@ -144,6 +144,8 @@ export default function App() {
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [showSizeTable, setShowSizeTable] = useState(false);
   const [modelInfoExpanded, setModelInfoExpanded] = useState(false);
+  // Paste hint anchored over the chat widget's iframe; null when hidden.
+  const [chatHint, setChatHint] = useState<{ left: number; bottom: number; width: number; key: string } | null>(null);
   const sizeChartRef = useRef<HTMLDivElement>(null);
   const [showVideoAccordion, setShowVideoAccordion] = useState(false);
   const [showReviewsAccordion, setShowReviewsAccordion] = useState(false);
@@ -338,6 +340,22 @@ export default function App() {
   useEffect(() => {
     setModelInfoExpanded(false);
   }, [currentImageIndex, colorImageOverride]);
+
+  // Dismiss on a click anywhere, on resize (the mobile keyboard fires one) or
+  // after six seconds. Clicks inside the chat iframe never reach us, so the
+  // timer is what ends it for someone who goes straight to typing.
+  useEffect(() => {
+    if (!chatHint) return;
+    const hide = () => setChatHint(null);
+    const timer = window.setTimeout(hide, 6000);
+    document.addEventListener('click', hide, true);
+    window.addEventListener('resize', hide);
+    return () => {
+      window.clearTimeout(timer);
+      document.removeEventListener('click', hide, true);
+      window.removeEventListener('resize', hide);
+    };
+  }, [chatHint]);
 
   // Lazily load sizes/colors (KeyCRM offers) the first time a product is opened
   useEffect(() => {
@@ -616,6 +634,37 @@ export default function App() {
     showToast("Напишіть нам у чат — кнопка в правому нижньому куті", "success");
   };
 
+  // How far the chat's own input sits above the iframe's bottom edge. The iframe
+  // is cross-origin so it cannot be measured - this keeps the hint clear of the
+  // input and the send button rather than overlapping them.
+  const CHAT_INPUT_ZONE_PX = 88;
+
+  const pasteHintKey = (): string => {
+    if (window.matchMedia?.('(pointer: coarse)').matches) return 'Утримайте поле вводу → «Вставити»';
+    return /Mac|iPhone|iPad|iPod/.test(navigator.platform || navigator.userAgent) ? '⌘V' : 'Ctrl+V';
+  };
+
+  // A toast in the page corner is invisible once the chat is open - on mobile the
+  // widget covers the whole screen. Put the hint where the shopper is looking.
+  const showPasteHint = () => {
+    window.setTimeout(() => {
+      const frame = document.querySelector('iframe[src*="chat.key.live"]') as HTMLIFrameElement | null;
+      const rect = frame?.getBoundingClientRect();
+      if (!rect || rect.width < 40 || rect.height < 40) {
+        showToast("Назву товару скопійовано — вставте в повідомлення");
+        return;
+      }
+      const width = Math.min(300, window.innerWidth - 24);
+      const centre = rect.left + rect.width / 2;
+      setChatHint({
+        left: Math.max(12, Math.min(centre - width / 2, window.innerWidth - width - 12)),
+        bottom: Math.max(12, window.innerHeight - rect.bottom + CHAT_INPUT_ZONE_PX),
+        width,
+        key: pasteHintKey(),
+      });
+    }, 450); // let the widget finish opening before measuring
+  };
+
   // The widget offers no way to prefill its input - open/close/toggle take no
   // arguments and the iframe is cross-origin - so the shopper pastes instead.
   // writeText must be called inside the click for the clipboard permission.
@@ -637,10 +686,7 @@ export default function App() {
 
     // A rejected permission must not surface as an error - the chat is open and
     // the shopper can simply type.
-    copying?.then(
-      () => showToast("Назву товару скопійовано — вставте в повідомлення"),
-      () => {},
-    );
+    copying?.then(showPasteHint, () => {});
   };
 
   // The chart is an inline accordion in the right-hand column - below the gallery
@@ -735,6 +781,21 @@ export default function App() {
       {notification && (
         <div className={`fixed top-5 right-5 z-[100] px-6 py-4 text-white uppercase text-xs font-bold tracking-widest shadow-lg transition-all transform translate-y-0 ${notification.type === 'error' ? 'bg-red-600' : 'bg-black'}`}>
           {notification.message}
+        </div>
+      )}
+
+      {/* Sits above the chat widget (its own z-index is 2147483004) and lets every
+          click pass through, so it can never block the input or the send button. */}
+      {chatHint && (
+        <div
+          className="fixed z-[2147483647] pointer-events-none animate-fade-in-up"
+          style={{ left: chatHint.left, bottom: chatHint.bottom, width: chatHint.width }}
+        >
+          <div className="relative bg-white text-gray-900 rounded-lg shadow-2xl border border-gray-200 px-3 py-2">
+            <p className="text-xs leading-snug">Назву товару скопійовано — вставте в повідомлення</p>
+            <p className="text-[11px] text-gray-500 mt-0.5">{chatHint.key}</p>
+            <span className="absolute left-1/2 -bottom-[7px] -translate-x-1/2 rotate-45 w-3 h-3 bg-white border-b border-r border-gray-200" />
+          </div>
         </div>
       )}
 
