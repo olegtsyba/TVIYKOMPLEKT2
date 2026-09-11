@@ -1148,11 +1148,68 @@ export default function App() {
                                        >
                                             {images && images.length > 0 && (
                                                 <>
-                                                    <img
-                                                        src={getImageUrl(colorImageOverride || images[currentImageIndex] || images[0])}
-                                                        alt={selectedProduct.title}
-                                                        className="w-full h-full object-contain object-center bg-gray-50 transition-transform duration-300"
-                                                    />
+                                                    {/* The wrapper shrinks to the letterboxed photo (w-fit/h-fit inside a
+                                                        definite-size flex parent), so the plaque anchors to the image's own
+                                                        edges instead of the container's - on a narrow photo those differ. */}
+                                                    <div className="absolute inset-0 bg-gray-50 flex items-center justify-center">
+                                                        <div className="relative w-fit h-fit max-w-full max-h-full">
+                                                            <img
+                                                                src={getImageUrl(shownUrl)}
+                                                                alt={selectedProduct.title}
+                                                                className="block max-w-full max-h-full object-contain transition-transform duration-300"
+                                                            />
+                                                            {modelInfo && (
+                                                                <div
+                                                                    className="absolute bottom-3 left-3 max-w-[calc(100%-1.5rem)] cursor-default"
+                                                                    onClick={(e) => e.stopPropagation()}
+                                                                >
+                                                                    <div className="bg-white/85 backdrop-blur-sm rounded shadow-sm text-gray-800 overflow-hidden">
+                                                                        <div className="flex items-stretch divide-x divide-black/10">
+                                                                            {canExpand ? (
+                                                                                <button
+                                                                                    type="button"
+                                                                                    onClick={() => setModelInfoExpanded(prev => !prev)}
+                                                                                    className="flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] leading-tight text-left font-medium hover:bg-white/60 transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-black"
+                                                                                >
+                                                                                    Зріст {modelInfo.height} см · розмір {modelInfo.size}
+                                                                                    <span className={`transition-transform duration-200 ${modelInfoExpanded ? 'rotate-180' : ''}`}>
+                                                                                        <ChevronDownIcon />
+                                                                                    </span>
+                                                                                </button>
+                                                                            ) : (
+                                                                                <span className="px-2.5 py-1.5 text-[11px] leading-tight font-medium">
+                                                                                    Зріст {modelInfo.height} см · розмір {modelInfo.size}
+                                                                                </span>
+                                                                            )}
+                                                                            <button
+                                                                                type="button"
+                                                                                onClick={openSizeChart}
+                                                                                className="px-2.5 py-1.5 text-[11px] leading-tight whitespace-nowrap text-gray-600 hover:bg-white/60 hover:text-black transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-black"
+                                                                            >
+                                                                                Таблиця розмірів
+                                                                            </button>
+                                                                        </div>
+
+                                                                        {canExpand && modelInfoExpanded && (
+                                                                            <div className="px-2.5 py-2 border-t border-black/10 text-[11px] leading-snug space-y-0.5 animate-fade-in">
+                                                                                {modelInfoDetails.map(detail => (
+                                                                                    <div key={detail.label} className="flex justify-between gap-4">
+                                                                                        <span className="text-gray-500">{detail.label}</span>
+                                                                                        <span className="font-medium">{detail.value} см</span>
+                                                                                    </div>
+                                                                                ))}
+                                                                                {modelInfo.note && (
+                                                                                    <p className={`text-gray-600 ${modelInfoDetails.length > 0 ? 'pt-1 mt-1 border-t border-black/5' : ''}`}>
+                                                                                        {modelInfo.note}
+                                                                                    </p>
+                                                                                )}
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </div>
                                                     <div className="absolute top-4 left-4 bg-white/80 p-2 rounded-full opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
                                                         <ZoomInIcon />
                                                     </div>
@@ -1180,59 +1237,8 @@ export default function App() {
                                                     </button>
                                                 </>
                                             )}
-
-                                            {modelInfo && (
-                                                <div
-                                                    className="absolute bottom-3 left-3 z-10 max-w-[calc(100%-1.5rem)] cursor-default"
-                                                    onClick={(e) => e.stopPropagation()}
-                                                >
-                                                    <div className="bg-white/85 backdrop-blur-sm rounded shadow-sm text-gray-800 overflow-hidden">
-                                                        <div className="flex items-stretch divide-x divide-black/10">
-                                                            {canExpand ? (
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => setModelInfoExpanded(prev => !prev)}
-                                                                    className="flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] leading-tight text-left font-medium hover:bg-white/60 transition-colors"
-                                                                >
-                                                                    Зріст {modelInfo.height} см · розмір {modelInfo.size}
-                                                                    <span className={`transition-transform duration-200 ${modelInfoExpanded ? 'rotate-180' : ''}`}>
-                                                                        <ChevronDownIcon />
-                                                                    </span>
-                                                                </button>
-                                                            ) : (
-                                                                <span className="px-2.5 py-1.5 text-[11px] leading-tight font-medium">
-                                                                    Зріст {modelInfo.height} см · розмір {modelInfo.size}
-                                                                </span>
-                                                            )}
-                                                            <button
-                                                                type="button"
-                                                                onClick={openSizeChart}
-                                                                className="px-2.5 py-1.5 text-[11px] leading-tight whitespace-nowrap text-gray-600 hover:bg-white/60 hover:text-black transition-colors"
-                                                            >
-                                                                Розмірна сітка
-                                                            </button>
-                                                        </div>
-
-                                                        {canExpand && modelInfoExpanded && (
-                                                            <div className="px-2.5 py-2 border-t border-black/10 text-[11px] leading-snug space-y-0.5 animate-fade-in">
-                                                                {modelInfoDetails.map(detail => (
-                                                                    <div key={detail.label} className="flex justify-between gap-4">
-                                                                        <span className="text-gray-500">{detail.label}</span>
-                                                                        <span className="font-medium">{detail.value} см</span>
-                                                                    </div>
-                                                                ))}
-                                                                {modelInfo.note && (
-                                                                    <p className={`text-gray-600 ${modelInfoDetails.length > 0 ? 'pt-1 mt-1 border-t border-black/5' : ''}`}>
-                                                                        {modelInfo.note}
-                                                                    </p>
-                                                                )}
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                            )}
                                        </div>
-                                       
+
                                        {/* Thumbnails */}
                                        {images && images.length > 1 && (
                                            <div className="mt-4 h-20 flex gap-2 overflow-x-auto no-scrollbar pb-2">
