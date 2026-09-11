@@ -58,7 +58,7 @@ const ZoomInIcon = () => (
 const DEFAULT_SETTINGS: SiteSettings = {
   heroTitle: "NEW\nCOLLECTION",
   heroSubtitle: "НОВА КОЛЕКЦІЯ",
-  heroBackgroundUrl: "https://tviykomplekt.api.keycrm.app/file-storage/thumbnails/tviykomplekt/uploads/2025-09-01/8gUL58c0AhNLObGJdAyB9n7nNoTtvdjV.jpeg",
+  heroBackgroundUrl: "/hero-options/IMG_2275.jpeg",
   logoText: "TVIYKOMPLEKT",
   heroDescription: "Естетика. Комфорт. Впевненість. Одяг, який підкреслює твою індивідуальність."
 };
@@ -749,8 +749,17 @@ export default function App() {
             <img 
                 src={siteSettings.heroBackgroundUrl || DEFAULT_SETTINGS.heroBackgroundUrl}
                 alt="Hero Background"
-                className="w-full h-full object-cover opacity-80"
-                style={{ objectPosition: '50% 65%' }}
+                // md:-only zoom+re-anchor: on the very wide desktop banner this
+                // portrait photo's full width is already shown by object-fit:cover
+                // (only height gets cropped), so object-position alone can't shift
+                // her horizontally - scale+transformOrigin zooms in and re-anchors
+                // the crop toward her, pushing her clear of the text panel. Left
+                // desktop-only because on the mobile banner's narrower aspect ratio
+                // she's already in frame without it, and applying the same zoom
+                // there pushes her almost entirely behind the (much wider relative
+                // to the banner) text panel.
+                className="w-full h-full object-cover opacity-80 md:scale-[1.3] md:origin-[11%_50%]"
+                style={{ objectPosition: '50% 60%' }}
             />
             <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent"></div>
         </div>
