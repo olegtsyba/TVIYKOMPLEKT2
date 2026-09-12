@@ -22,16 +22,18 @@ import { Product, SizeChart, Review, RelatedColor } from './types';
 //
 // KeyCRM categories deliberately left without a button (reachable only via
 // «Всі»): 11 Термобілизна (1 товар), 12 Аксесуари (1 товар).
-export const CATEGORIES: { id: string; label: string; categoryIds?: number[] }[] = [
+// shortLabel is what the top strip shows on phones: the full labels wrap to
+// eight rows at 375px, which would bury the catalogue under the filter.
+export const CATEGORIES: { id: string; label: string; shortLabel?: string; categoryIds?: number[] }[] = [
   { id: 'all', label: 'Всі' },
-  { id: 'bodysuits', label: 'Комбінезони/Напівкомбінезони', categoryIds: [3, 10] },
+  { id: 'bodysuits', label: 'Комбінезони/Напівкомбінезони', shortLabel: 'Комбінезони', categoryIds: [3, 10] },
   { id: 'leggings', label: 'Лосини', categoryIds: [1] },
   { id: 'sets', label: 'Комплекти', categoryIds: [5, 6, 9] },
-  { id: 'tshirts', label: 'Футболки та майки', categoryIds: [7] },
-  { id: 'rashguards', label: 'Рашгарди та лонгсліви', categoryIds: [2] },
+  { id: 'tshirts', label: 'Футболки та майки', shortLabel: 'Футболки', categoryIds: [7] },
+  { id: 'rashguards', label: 'Рашгарди та лонгсліви', shortLabel: 'Рашгарди', categoryIds: [2] },
   { id: 'tops', label: 'Топи', categoryIds: [8] },
-  { id: 'shorts', label: 'Шорти та велосипедки', categoryIds: [4] },
-  { id: 'dresses', label: 'Сукні та спідниці', categoryIds: [13] },
+  { id: 'shorts', label: 'Шорти та велосипедки', shortLabel: 'Шорти', categoryIds: [4] },
+  { id: 'dresses', label: 'Сукні та спідниці', shortLabel: 'Сукні', categoryIds: [13] },
 ];
 
 // Shown on the product card when a KeyCRM product has no usable description

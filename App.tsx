@@ -163,25 +163,6 @@ export default function App() {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const searchContainerRef = useRef<HTMLDivElement>(null);
   const variantsLoadedRef = useRef<Set<string>>(new Set());
-  const categoryScrollRef = useRef<HTMLDivElement>(null);
-  const [showCategoryScrollHint, setShowCategoryScrollHint] = useState(false);
-
-  // Category bar horizontal-scroll hint (mobile): show a fade on the right
-  // edge while there's more to scroll, hide it once scrolled to the end.
-  const updateCategoryScrollHint = () => {
-    const el = categoryScrollRef.current;
-    if (!el) return;
-    const isOverflowing = el.scrollWidth > el.clientWidth + 1;
-    const atEnd = el.scrollLeft + el.clientWidth >= el.scrollWidth - 1;
-    setShowCategoryScrollHint(isOverflowing && !atEnd);
-  };
-
-  useEffect(() => {
-    updateCategoryScrollHint();
-    window.addEventListener('resize', updateCategoryScrollHint);
-    return () => window.removeEventListener('resize', updateCategoryScrollHint);
-  }, []);
-
   // Fetch Data Effect
   useEffect(() => {
     const fetchData = async () => {
@@ -982,40 +963,30 @@ export default function App() {
       {/* Main Content */}
       <main id="catalog" className="flex-grow container mx-auto px-4 py-12">
         
-        {/* Categories */}
-        <div className="sticky top-[70px] z-30 relative mb-8">
-            <div
-                ref={categoryScrollRef}
-                onScroll={updateCategoryScrollHint}
-                className="bg-white/90 backdrop-blur-sm py-4 border-b border-gray-100 overflow-x-auto no-scrollbar"
-            >
-                <div className="flex justify-start md:justify-center gap-4 min-w-max px-4">
-                    {CATEGORIES.map(cat => (
-                        <button
-                            key={cat.id}
-                            onClick={() => {
-                                setActiveCategory(cat.id);
-                                setVisibleCount(8);
-                            }}
-                            className={`text-xs uppercase tracking-widest px-4 py-2 transition-all duration-300 ${
-                                activeCategory === cat.id
-                                ? 'text-black border-b-2 border-black font-semibold'
-                                : 'text-gray-500 hover:text-black'
-                            }`}
-                        >
-                            {cat.label}
-                        </button>
-                    ))}
-                </div>
+        {/* Categories — wraps instead of scrolling. A horizontal strip could not
+            be reached by wheel or drag on desktop, and md:justify-center made the
+            left overflow unreachable outright. Short labels on phones: the full
+            ones wrap to eight rows at 375px. */}
+        <div className="md:sticky md:top-[70px] z-30 mb-8 bg-white/90 backdrop-blur-sm py-3 md:py-4 border-b border-gray-100">
+            <div className="flex flex-wrap gap-x-1.5 gap-y-1.5 md:gap-4 px-2 md:px-4 md:justify-center">
+                {CATEGORIES.map(cat => (
+                    <button
+                        key={cat.id}
+                        onClick={() => {
+                            setActiveCategory(cat.id);
+                            setVisibleCount(8);
+                        }}
+                        className={`text-xs uppercase tracking-wide md:tracking-widest px-2.5 md:px-4 py-2 transition-all duration-300 ${
+                            activeCategory === cat.id
+                            ? 'text-black border-b-2 border-black font-semibold'
+                            : 'text-gray-500 hover:text-black'
+                        }`}
+                    >
+                        <span className="md:hidden">{cat.shortLabel ?? cat.label}</span>
+                        <span className="hidden md:inline">{cat.label}</span>
+                    </button>
+                ))}
             </div>
-            {/* Fade hint that there's more to scroll horizontally - a sibling of
-                the scrolling element (not a descendant), so it stays pinned to
-                the edge regardless of scrollLeft. Fades out at the end. */}
-            <div
-                className={`pointer-events-none absolute top-0 right-0 bottom-0 w-10 bg-gradient-to-l from-white to-transparent transition-opacity duration-300 ${
-                    showCategoryScrollHint ? 'opacity-100' : 'opacity-0'
-                }`}
-            />
         </div>
 
         <div className="flex flex-col md:flex-row gap-8 items-start">
