@@ -13,7 +13,8 @@
     "check-order-notifications": "node check-order-notifications.js",
     "check-lead-notifications": "node check-lead-notifications.js",
     "classify-repeat-leads": "node classify-repeat-leads.js",
-    "move-to-sales": "node move-to-sales.js"
+    "move-to-sales": "node move-to-sales.js",
+    "add-cards-from-chats": "node add-cards-from-chats.js"
   },
   "keywords": [],
   "author": "",
