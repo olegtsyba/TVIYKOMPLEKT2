@@ -5,6 +5,7 @@ import { Product, CartItem, SiteSettings, Review, SizeChartRow } from './types';
 import {
   fetchAllKeycrmProducts, fetchOffersForProduct, mapKeycrmProduct, deriveVariants,
   fetchAllKeycrmOffers, deriveVariantsByProduct, readCachedOfferVariants, writeCachedOfferVariants, sizeSortKey,
+  keycrmImageUrl, supportsKeycrmWebp,
   type KeycrmOffer, type ProductVariants,
 } from './services/keycrm';
 import { fetchActivePromotions, applyPromotion } from './services/promotions';
@@ -98,6 +99,52 @@ const FOOTER_INFO_CONTENT: Record<FooterInfoKey, { title: string; paragraphs: st
 // The red SALE badge is the only other label on a card and lives in the opposite
 // corner, so the card never stacks two plates in one place.
 const CARD_LABEL_CLASS = 'bg-black text-white text-[10px] font-bold px-2 py-1 uppercase tracking-widest shadow-sm';
+
+// Serves a KeyCRM photo at the size actually needed instead of the full-resolution
+// original the shop keeps for print and Instagram. `contents` on the <picture> keeps
+// the <img> laid out exactly as before, so overlays positioned against it - the model
+// info plaque, the badges - do not shift.
+const getImageUrl = (url: string) => {
+  if (!url || url === 'placeholder.jpg') return 'https://picsum.photos/400/500';
+  return url.split(',')[0].trim();
+};
+
+function ProductPicture({ url, width, alt, className, loading = 'lazy' }: {
+  url: string;
+  width: number;
+  alt: string;
+  className?: string;
+  loading?: 'lazy' | 'eager';
+}) {
+  const [failed, setFailed] = useState(false);
+  const base = getImageUrl(url);
+  const resized = keycrmImageUrl(base, width);
+
+  // Nothing to resize (a Storage upload), or a resized URL already failed once.
+  if (failed || resized === base) {
+    return <img src={base} alt={alt} className={className} loading={loading} decoding="async" />;
+  }
+
+  return (
+    <picture className="contents">
+      {supportsKeycrmWebp(base) && (
+        <source
+          type="image/webp"
+          srcSet={`${keycrmImageUrl(base, width, true)} 1x, ${keycrmImageUrl(base, width * 2, true)} 2x`}
+        />
+      )}
+      <img
+        src={resized}
+        srcSet={`${resized} 1x, ${keycrmImageUrl(base, width * 2)} 2x`}
+        alt={alt}
+        className={className}
+        loading={loading}
+        decoding="async"
+        onError={() => setFailed(true)}
+      />
+    </picture>
+  );
+}
 
 interface LightboxItem {
     type: 'image' | 'video';
@@ -546,11 +593,6 @@ export default function App() {
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
     setNotification({ message, type });
     setTimeout(() => setNotification(null), 3000);
-  };
-
-  const getImageUrl = (url: string) => {
-    if (!url || url === 'placeholder.jpg') return 'https://picsum.photos/400/500';
-    return url.split(',')[0].trim();
   };
 
   const getEmbedUrl = (videoId: string) => {
@@ -1157,11 +1199,11 @@ export default function App() {
                             setSelectedProduct(product);
                         }}>
                             <div className="relative overflow-hidden bg-gray-100 aspect-[4/5] mb-4">
-                                <img 
-                                    src={getImageUrl(images[0])} 
-                                    alt={product.title} 
+                                <ProductPicture
+                                    url={images[0]}
+                                    width={600}
+                                    alt={product.title}
                                     className="w-full h-full object-cover object-top transition-transform duration-700 group-hover:scale-105"
-                                    loading="lazy"
                                 />
                                 
                                 {/* One editorial label top-left; the discount keeps the
@@ -1386,8 +1428,10 @@ export default function App() {
                                                         edges instead of the container's - on a narrow photo those differ. */}
                                                     <div className="absolute inset-0 bg-gray-50 flex items-center justify-center">
                                                         <div className="relative w-fit h-fit max-w-full max-h-full">
-                                                            <img
-                                                                src={getImageUrl(shownUrl)}
+                                                            <ProductPicture
+                                                                url={shownUrl}
+                                                                width={1200}
+                                                                loading="eager"
                                                                 alt={selectedProduct.title}
                                                                 className="block max-w-full max-h-full object-contain transition-transform duration-300"
                                                             />
@@ -1481,7 +1525,7 @@ export default function App() {
                                                        onClick={() => setCurrentImageIndex(idx)}
                                                        className={`relative flex-shrink-0 aspect-[4/5] h-full overflow-hidden border-2 transition-all ${currentImageIndex === idx ? 'border-black opacity-100' : 'border-transparent opacity-60 hover:opacity-100'}`}
                                                    >
-                                                       <img src={getImageUrl(img)} className="w-full h-full object-cover" alt="thumb"/>
+                                                       <ProductPicture url={img} width={200} className="w-full h-full object-cover" alt="thumb" />
                                                    </button>
                                                ))}
                                            </div>
@@ -1880,7 +1924,7 @@ export default function App() {
                     cart.map((item, idx) => (
                         <div key={item.cartId} className="flex gap-4 pb-6 border-b border-gray-50 last:border-0">
                             <div className="w-20 h-24 bg-gray-100 flex-shrink-0">
-                                <img src={getImageUrl(item.images[0])} alt={item.title} className="w-full h-full object-cover"/>
+                                <ProductPicture url={item.images[0]} width={200} alt={item.title} className="w-full h-full object-cover" />
                             </div>
                             <div className="flex-1 flex flex-col justify-between">
                                 <div>

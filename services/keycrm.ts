@@ -189,6 +189,28 @@ export function sanitizeDescription(raw: string | null | undefined): string {
   return text;
 }
 
+
+// KeyCRM's file server resizes on the fly: ?w= sets the width, ?fm=webp converts.
+// Anything it does not understand - an unknown name, a junk value, a width above
+// the original - is ignored and the original comes back with a 200, so a bad
+// combination can only ever be heavier, never broken. Verified 2026-09-12 across
+// all 101 catalogue covers: 53.9 MB of originals become 5.0 MB at w=600&fm=webp.
+const KEYCRM_FILE_HOST = 'tviykomplekt.api.keycrm.app';
+
+// The /file-storage/remote endpoint proxies an external image and, unlike
+// /file-storage/thumbnails, honours `w` but ignores `fm` - offering a WebP
+// <source> for those would promise a format it does not return. Its URLs also
+// already carry a query string, hence the join below rather than a bare '?'.
+export function supportsKeycrmWebp(url: string): boolean {
+  return url.includes(KEYCRM_FILE_HOST) && url.includes('/file-storage/thumbnails/');
+}
+
+export function keycrmImageUrl(url: string, width: number, webp = false): string {
+  if (!url || !url.includes(KEYCRM_FILE_HOST)) return url; // admin uploads live in Storage
+  const params = `w=${width}${webp && supportsKeycrmWebp(url) ? '&fm=webp' : ''}`;
+  return `${url}${url.includes('?') ? '&' : '?'}${params}`;
+}
+
 export function mapKeycrmProduct(kc: KeycrmProduct): Product {
   const images = kc.attachments_data && kc.attachments_data.length > 0
     ? kc.attachments_data

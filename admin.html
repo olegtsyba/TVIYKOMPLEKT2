@@ -897,7 +897,7 @@
 
                 tr.innerHTML = `
                     <td class="p-4">
-                        <img src="${p.thumbnail_url || 'https://placehold.co/50'}" class="w-10 h-12 object-cover rounded bg-gray-200">
+                        <img src="${p.thumbnail_url ? keycrmThumb(p.thumbnail_url, 120) : 'https://placehold.co/50'}" loading="lazy" class="w-10 h-12 object-cover rounded bg-gray-200">
                     </td>
                     <td class="p-4 font-medium">${escapeHtml(p.name)}${(() => {
                         const st = keycrmProductSettings[String(p.id)];
@@ -1284,6 +1284,21 @@
             });
         };
 
+        // KeyCRM's file server resizes on the fly. The product list pulls ~100
+        // covers at once and the model-info grid up to 12 per product, all of
+        // them multi-megabyte originals; at these thumbnail sizes that is pure
+        // waste. Unknown params are ignored and the original comes back with a
+        // 200, so this can never break an image. Keep in sync with
+        // keycrmImageUrl in services/keycrm.ts.
+        const KEYCRM_FILE_HOST = 'tviykomplekt.api.keycrm.app';
+
+        const keycrmThumb = (url, width) => {
+            if (!url || !url.includes(KEYCRM_FILE_HOST)) return url;
+            // /file-storage/remote URLs already carry a query string and ignore fm.
+            const webp = url.includes('/file-storage/thumbnails/') ? '&fm=webp' : '';
+            return `${url}${url.includes('?') ? '&' : '?'}w=${width}${webp}`;
+        };
+
         const escapeHtml = (str) => String(str ?? '').replace(/[&<>"']/g, (c) => ({
             '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
         }[c]));
@@ -1545,7 +1560,7 @@
                 card.className = 'border border-gray-200 rounded p-2 flex gap-2';
                 card.dataset.url = url;
                 card.innerHTML = `
-                    <img src="${escapeHtml(url)}" class="w-14 h-[4.5rem] object-cover rounded bg-gray-100 flex-shrink-0">
+                    <img src="${escapeHtml(keycrmThumb(url, 200))}" loading="lazy" class="w-14 h-[4.5rem] object-cover rounded bg-gray-100 flex-shrink-0">
                     <div class="flex-1 min-w-0">
                         <label class="flex items-center gap-2 text-xs font-bold cursor-pointer">
                             <input type="checkbox" class="mi-on" ${on ? 'checked' : ''}>
@@ -1792,7 +1807,9 @@
             // keycrmProducts list, no extra request. NOTE: this is display-only;
             // writing changes back to KeyCRM (PUT /products/{id}) would be a
             // separate, later feature - not implemented here.
-            document.getElementById('modalProductImage').src = product.thumbnail_url || 'https://placehold.co/100';
+            document.getElementById('modalProductImage').src = product.thumbnail_url
+                ? keycrmThumb(product.thumbnail_url, 300)
+                : 'https://placehold.co/100';
             document.getElementById('modalProductName').innerText = product.name;
             document.getElementById('modalProductId').innerText = product.id;
             document.getElementById('modalProductPrice').innerText = product.min_price > 0
