@@ -163,6 +163,76 @@ export default function App() {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const searchContainerRef = useRef<HTMLDivElement>(null);
   const variantsLoadedRef = useRef<Set<string>>(new Set());
+  const categoryScrollRef = useRef<HTMLDivElement>(null);
+  const activeCategoryRef = useRef<HTMLButtonElement>(null);
+  const categoryDrag = useRef({ active: false, startX: 0, startLeft: 0, moved: false });
+  const [categoryEdges, setCategoryEdges] = useState({ left: false, right: false });
+
+  // Which side still hides categories, so only that edge gets a fade.
+  const updateCategoryEdges = () => {
+    const el = categoryScrollRef.current;
+    if (!el) return;
+    const max = el.scrollWidth - el.clientWidth;
+    setCategoryEdges({ left: el.scrollLeft > 1, right: el.scrollLeft < max - 1 });
+  };
+
+  useEffect(() => {
+    updateCategoryEdges();
+    window.addEventListener('resize', updateCategoryEdges);
+    return () => window.removeEventListener('resize', updateCategoryEdges);
+  }, []);
+
+  // A vertical wheel does not scroll a container sideways, so translate it. The
+  // listener has to be non-passive to preventDefault, hence not onWheel. At
+  // either end we bow out and let the page scroll instead of trapping it.
+  useEffect(() => {
+    const el = categoryScrollRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (e.deltaY === 0) return;
+      const max = el.scrollWidth - el.clientWidth;
+      if (max <= 0) return;
+      if (e.deltaY < 0 && el.scrollLeft <= 0) return;
+      if (e.deltaY > 0 && el.scrollLeft >= max) return;
+      e.preventDefault();
+      el.scrollLeft += e.deltaY;
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, []);
+
+  // Keep the chosen category away from the edges so its neighbours stay visible.
+  useEffect(() => {
+    activeCategoryRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+  }, [activeCategory]);
+
+  // Mouse only: touch already scrolls natively, and hijacking it would fight the
+  // browser. `moved` suppresses the click that a drag would otherwise fire.
+  const onCategoryPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    // Reset first: a stale `moved` from an earlier drag would swallow this click.
+    categoryDrag.current = { active: false, startX: e.clientX, startLeft: 0, moved: false };
+    if (e.pointerType !== 'mouse') return;
+    const el = categoryScrollRef.current;
+    if (!el || el.scrollWidth <= el.clientWidth) return;
+    categoryDrag.current = { active: true, startX: e.clientX, startLeft: el.scrollLeft, moved: false };
+    el.setPointerCapture(e.pointerId);
+  };
+
+  const onCategoryPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    const drag = categoryDrag.current;
+    if (!drag.active) return;
+    const delta = e.clientX - drag.startX;
+    if (Math.abs(delta) > 3) drag.moved = true;
+    const el = categoryScrollRef.current;
+    if (el) el.scrollLeft = drag.startLeft - delta;
+  };
+
+  const endCategoryDrag = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!categoryDrag.current.active) return;
+    categoryDrag.current.active = false;
+    categoryScrollRef.current?.releasePointerCapture(e.pointerId);
+  };
+
   // Fetch Data Effect
   useEffect(() => {
     const fetchData = async () => {
@@ -963,29 +1033,47 @@ export default function App() {
       {/* Main Content */}
       <main id="catalog" className="flex-grow container mx-auto px-4 py-12">
         
-        {/* Categories — wraps instead of scrolling. A horizontal strip could not
-            be reached by wheel or drag on desktop, and md:justify-center made the
-            left overflow unreachable outright. Short labels on phones: the full
-            ones wrap to eight rows at 375px. */}
-        <div className="md:sticky md:top-[70px] z-30 mb-8 bg-white/90 backdrop-blur-sm py-3 md:py-4 border-b border-gray-100">
-            <div className="flex flex-wrap gap-x-1.5 gap-y-1.5 md:gap-4 px-2 md:px-4 md:justify-center">
-                {CATEGORIES.map(cat => (
-                    <button
-                        key={cat.id}
-                        onClick={() => {
-                            setActiveCategory(cat.id);
-                            setVisibleCount(8);
-                        }}
-                        className={`text-xs uppercase tracking-wide md:tracking-widest px-2.5 md:px-4 py-2 transition-all duration-300 ${
-                            activeCategory === cat.id
-                            ? 'text-black border-b-2 border-black font-semibold'
-                            : 'text-gray-500 hover:text-black'
-                        }`}
-                    >
-                        <span className="md:hidden">{cat.shortLabel ?? cat.label}</span>
-                        <span className="hidden md:inline">{cat.label}</span>
-                    </button>
-                ))}
+        {/* Categories — one row that scrolls. No justify-center: with overflow it
+            pushes the excess out both sides and the left end becomes unreachable.
+            `w-max mx-auto` centres the strip only while it fits. */}
+        <div className="sticky top-[70px] z-30 mb-8">
+            <div className="relative bg-white/90 backdrop-blur-sm border-b border-gray-100">
+                <div
+                    ref={categoryScrollRef}
+                    onScroll={updateCategoryEdges}
+                    onPointerDown={onCategoryPointerDown}
+                    onPointerMove={onCategoryPointerMove}
+                    onPointerUp={endCategoryDrag}
+                    onPointerCancel={endCategoryDrag}
+                    className={`overflow-x-auto no-scrollbar py-3 md:py-4 ${
+                        categoryEdges.left || categoryEdges.right ? 'cursor-grab active:cursor-grabbing' : ''
+                    }`}
+                >
+                    <div className="flex w-max mx-auto gap-4 px-4">
+                        {CATEGORIES.map(cat => (
+                            <button
+                                key={cat.id}
+                                ref={activeCategory === cat.id ? activeCategoryRef : undefined}
+                                onClick={() => {
+                                    if (categoryDrag.current.moved) return; // a drag, not a click
+                                    setActiveCategory(cat.id);
+                                    setVisibleCount(8);
+                                }}
+                                className={`whitespace-nowrap cursor-pointer text-xs uppercase tracking-widest px-4 py-2 transition-all duration-300 ${
+                                    activeCategory === cat.id
+                                    ? 'text-black border-b-2 border-black font-semibold'
+                                    : 'text-gray-500 hover:text-black'
+                                }`}
+                            >
+                                {cat.label}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+
+                {/* Siblings of the scroller, so they stay pinned to the edges. */}
+                <div className={`pointer-events-none absolute top-0 left-0 bottom-0 w-10 bg-gradient-to-r from-white to-transparent transition-opacity duration-300 ${categoryEdges.left ? 'opacity-100' : 'opacity-0'}`} />
+                <div className={`pointer-events-none absolute top-0 right-0 bottom-0 w-10 bg-gradient-to-l from-white to-transparent transition-opacity duration-300 ${categoryEdges.right ? 'opacity-100' : 'opacity-0'}`} />
             </div>
         </div>
 
