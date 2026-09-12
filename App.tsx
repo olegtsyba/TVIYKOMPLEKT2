@@ -421,6 +421,33 @@ export default function App() {
     }
   }, [cart]);
 
+  // Switching gallery photos used to be instant because the thumbnail strip and
+  // the main view shared one URL - the untouched original - so the click hit a
+  // warm cache. They now ask for different sizes (200px vs 1200px), which put a
+  // fetch in front of every switch. Warm the main-size copies while the shopper
+  // is still looking at the first photo: at most 12 per product, ~70 KB each.
+  //
+  // srcset rather than src, so the browser picks the same candidate for this
+  // screen's pixel density that <picture> will ask for later - preloading the 1x
+  // copy on a 2x screen would just download a file nothing goes on to use.
+  useEffect(() => {
+    if (!selectedProduct) return;
+    const images = getProductImages(selectedProduct);
+    if (images.length <= 1) return;
+
+    const loaders = images.map(raw => {
+      const base = getImageUrl(raw);
+      const webp = supportsKeycrmWebp(base);
+      const img = new Image();
+      img.srcset = `${keycrmImageUrl(base, 1200, webp)} 1x, ${keycrmImageUrl(base, 2400, webp)} 2x`;
+      img.src = keycrmImageUrl(base, 1200, webp);
+      return img;
+    });
+
+    // Drop the requests if the card is closed before they finish.
+    return () => loaders.forEach(img => { img.srcset = ''; img.src = ''; });
+  }, [selectedProduct]);
+
   // Reset modal state when product changes
   useEffect(() => {
     if (selectedProduct) {
