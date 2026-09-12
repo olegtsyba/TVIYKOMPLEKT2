@@ -341,6 +341,17 @@ export default function App() {
     setModelInfoExpanded(false);
   }, [currentImageIndex, colorImageOverride]);
 
+  // A product with exactly one colour or size has nothing to choose, so pick it
+  // silently - otherwise the line would reach the cart without it and the offer
+  // could not be resolved. Variants arrive lazily, hence the effect.
+  useEffect(() => {
+    if (!selectedProduct) return;
+    const colors = selectedProduct.colors || [];
+    const sizes = selectedProduct.sizes || [];
+    if (colors.length === 1) setSelectedColorForModal(prev => prev || colors[0]);
+    if (sizes.length === 1) setSelectedSizeForModal(prev => prev || sizes[0]);
+  }, [selectedProduct]);
+
   // Dismiss on a click anywhere, on resize (the mobile keyboard fires one) or
   // after six seconds. Clicks inside the chat iframe never reach us, so the
   // timer is what ends it for someone who goes straight to typing.
@@ -495,10 +506,16 @@ export default function App() {
       showToast("❌ Ціна уточнюється, зверніться до менеджера", "error");
       return;
     }
-    if (product.sizes && product.sizes.length > 0 && !size) {
+    if ((product.sizes?.length ?? 0) > 1 && !size) {
       showToast("⚠️ Оберіть розмір!", "error");
       setSizeError(true);
       setTimeout(() => setSizeError(false), 600);
+      return;
+    }
+    // Without a colour the offer lookup below matches an arbitrary one, so the
+    // line would carry a plausible but wrong sku.
+    if ((product.colors?.length ?? 0) > 1 && !color) {
+      showToast("⚠️ Оберіть колір!", "error");
       return;
     }
     if (!isVariantAvailable(color || '', size)) {
@@ -530,6 +547,14 @@ export default function App() {
     newCart.splice(index, 1);
     setCart(newCart);
   };
+
+  // Carts saved before the colour became mandatory can hold a line with none,
+  // which cannot be tied to a KeyCRM offer. Such a line must be re-picked.
+  const isCartItemIncomplete = (item: CartItem): boolean =>
+    ((item.colors?.length ?? 0) > 1 && !item.selectedColor) ||
+    ((item.sizes?.length ?? 0) > 1 && !item.selectedSize);
+
+  const incompleteCartItems = (cart || []).filter(isCartItemIncomplete).length;
 
   const cartTotal = (cart || []).reduce((acc, item) => acc + item.price, 0);
 
@@ -751,7 +776,28 @@ export default function App() {
   // KeyCRM sometimes reports no positive price for any offer of a product
   // (see getMinOfferPrice in services/keycrm.ts) - price then stays 0.
   const hasValidPrice = selectedProduct ? selectedProduct.price > 0 : true;
-  const canAddToCart = isCurrentSelectionAvailable && hasValidPrice;
+
+  // Only a real choice is required. One colour or one size is auto-selected
+  // above, and a product with none of either needs nothing.
+  const missingColor = (selectedProduct?.colors?.length ?? 0) > 1 && !selectedColorForModal;
+  const missingSize = (selectedProduct?.sizes?.length ?? 0) > 1 && !selectedSizeForModal;
+  const canAddToCart = isCurrentSelectionAvailable && hasValidPrice && !missingColor && !missingSize;
+
+  // Mark the outstanding block only once the other one is settled: on a freshly
+  // opened card both are blank and colouring everything red reads as an error
+  // the shopper has not made yet. The button label carries the ask until then.
+  const promptColor = missingColor && !missingSize;
+  const promptSize = missingSize && !missingColor;
+
+  const addToCartLabel = !hasValidPrice
+    ? 'Ціна уточнюється'
+    : missingColor && missingSize
+      ? 'Оберіть колір і розмір'
+      : missingColor
+        ? 'Оберіть колір'
+        : missingSize
+          ? 'Оберіть розмір'
+          : 'Додати в кошик';
 
   const handleSelectColor = (color: string) => {
     setSelectedColorForModal(color);
@@ -1412,8 +1458,8 @@ export default function App() {
                             {/* Color Selection — real KeyCRM offer colors */}
                             {selectedProduct.colors && selectedProduct.colors.length > 0 && (
                                 <div className="mb-6">
-                                    <p className="text-xs uppercase font-bold tracking-wider mb-2">
-                                        Оберіть колір: <span className="text-gray-500 font-normal">{selectedColorForModal || ''}</span>
+                                    <p className={`text-xs uppercase font-bold tracking-wider mb-2 transition-colors ${promptColor ? 'text-red-500' : ''}`}>
+                                        {promptColor ? '⚠️ ' : ''}Оберіть колір: <span className="text-gray-500 font-normal">{selectedColorForModal || ''}</span>
                                     </p>
                                     <div className="flex flex-wrap gap-3">
                                         {selectedProduct.colors.map(color => {
@@ -1446,8 +1492,8 @@ export default function App() {
                             {/* Sizes & Chart */}
                             <div className="mb-6" ref={sizeChartRef}>
                                 <div className="flex justify-between items-center mb-3">
-                                    <p className={`text-xs uppercase font-bold tracking-wider transition-colors ${sizeError ? 'text-red-500' : 'text-gray-900'}`}>
-                                        {sizeError ? '⚠️ Оберіть розмір:' : 'Оберіть розмір:'}
+                                    <p className={`text-xs uppercase font-bold tracking-wider transition-colors ${sizeError || promptSize ? 'text-red-500' : 'text-gray-900'}`}>
+                                        {sizeError || promptSize ? '⚠️ Оберіть розмір:' : 'Оберіть розмір:'}
                                     </p>
                                     <button 
                                         onClick={() => setShowSizeTable(!showSizeTable)}
@@ -1556,7 +1602,7 @@ export default function App() {
                                         : 'bg-gray-200 text-gray-400 cursor-not-allowed'
                                     }`}
                                 >
-                                    {hasValidPrice ? 'Додати в кошик' : 'Ціна уточнюється'}
+                                    {addToCartLabel}
                                 </button>
                             ) : (
                                 <button
@@ -1763,6 +1809,11 @@ export default function App() {
                                         Розмір: {item.selectedSize}
                                         {item.selectedColor && ` · Колір: ${item.selectedColor}`}
                                     </p>
+                                    {isCartItemIncomplete(item) && (
+                                        <p className="text-xs text-red-600 mt-1">
+                                            ⚠️ Не вказано колір — видаліть і додайте товар заново
+                                        </p>
+                                    )}
                                 </div>
                                 <div className="flex justify-between items-end">
                                     <span className="font-semibold text-sm">{item.price} UAH</span>
@@ -1788,9 +1839,19 @@ export default function App() {
                                 <span>{cartTotal} UAH</span>
                             </div>
                              <div className="space-y-3">
-                                <button 
+                                {incompleteCartItems > 0 && (
+                                    <p className="text-xs text-red-600 text-center">
+                                        Один із товарів доданий без кольору. Видаліть його й додайте заново.
+                                    </p>
+                                )}
+                                <button
                                     onClick={() => setShowOrderForm(true)}
-                                    className="w-full bg-black text-white py-4 uppercase tracking-widest text-xs font-bold hover:bg-gray-800 transition-colors"
+                                    disabled={incompleteCartItems > 0}
+                                    className={`w-full py-4 uppercase tracking-widest text-xs font-bold transition-colors ${
+                                        incompleteCartItems > 0
+                                        ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                                        : 'bg-black text-white hover:bg-gray-800'
+                                    }`}
                                 >
                                     Оформити замовлення
                                 </button>
