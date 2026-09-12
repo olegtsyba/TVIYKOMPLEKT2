@@ -181,16 +181,20 @@ export default function App() {
     return () => window.removeEventListener('resize', updateCategoryEdges);
   }, []);
 
-  // A vertical wheel does not scroll a container sideways, so translate it. The
-  // listener has to be non-passive to preventDefault, hence not onWheel. At
-  // either end we bow out and let the page scroll instead of trapping it.
+  // A mouse wheel does not scroll a container sideways, so translate it. The
+  // listener has to be non-passive to preventDefault, hence not onWheel.
   useEffect(() => {
     const el = categoryScrollRef.current;
     if (!el) return;
     const onWheel = (e: WheelEvent) => {
-      if (e.deltaY === 0) return;
+      // Any horizontal component means a trackpad gesture. The browser already
+      // scrolls the strip for those, with momentum we cannot reproduce, so stay
+      // out of the way - and a vertical swipe that drifts sideways then scrolls
+      // the page instead of fighting it.
+      if (e.deltaX !== 0 || e.deltaY === 0) return;
       const max = el.scrollWidth - el.clientWidth;
       if (max <= 0) return;
+      // At either end, hand the page back its scroll rather than trapping it.
       if (e.deltaY < 0 && el.scrollLeft <= 0) return;
       if (e.deltaY > 0 && el.scrollLeft >= max) return;
       e.preventDefault();
