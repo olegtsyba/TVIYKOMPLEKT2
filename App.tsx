@@ -165,6 +165,9 @@ export default function App() {
   const variantsLoadedRef = useRef<Set<string>>(new Set());
   const categoryScrollRef = useRef<HTMLDivElement>(null);
   const activeCategoryRef = useRef<HTMLButtonElement>(null);
+  const categoryDragRef = useRef({ startX: 0, startLeft: 0 });
+  const categoryMovedRef = useRef(false);
+  const [categoryDragging, setCategoryDragging] = useState(false);
   const [categoryEdges, setCategoryEdges] = useState({ left: false, right: false });
 
   // Which side still hides categories, so only that edge gets a fade.
@@ -203,6 +206,43 @@ export default function App() {
     el.addEventListener('wheel', onWheel, { passive: false });
     return () => el.removeEventListener('wheel', onWheel);
   }, []);
+
+  // Drag-to-scroll, mouse only - touch swipes natively and must not be touched.
+  // Deliberately no setPointerCapture: capturing on this container makes the
+  // click land here instead of on the button, which killed category switching
+  // outright last time. Plain document listeners have no such side effect, and
+  // no preventDefault either - the strip is select-none, so nothing highlights
+  // while dragging and the click path stays completely untouched.
+  const onCategoryMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    categoryMovedRef.current = false; // a fresh press is a click until proven otherwise
+    if (e.button !== 0) return;
+    const el = categoryScrollRef.current;
+    if (!el || el.scrollWidth <= el.clientWidth) return;
+    categoryDragRef.current = { startX: e.clientX, startLeft: el.scrollLeft };
+    setCategoryDragging(true);
+  };
+
+  useEffect(() => {
+    if (!categoryDragging) return;
+    const end = () => setCategoryDragging(false);
+    const onMove = (e: MouseEvent) => {
+      // buttons === 0 means it was released somewhere we never heard about,
+      // e.g. outside the window.
+      if (e.buttons === 0) return end();
+      const delta = e.clientX - categoryDragRef.current.startX;
+      if (Math.abs(delta) > 5) categoryMovedRef.current = true;
+      const el = categoryScrollRef.current;
+      if (el) el.scrollLeft = categoryDragRef.current.startLeft - delta;
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', end);
+    window.addEventListener('blur', end);
+    return () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', end);
+      window.removeEventListener('blur', end);
+    };
+  }, [categoryDragging]);
 
   // Keep the chosen category away from the edges so its neighbours stay visible.
   useEffect(() => {
@@ -1014,16 +1054,21 @@ export default function App() {
             and the left end becomes unreachable. `w-max mx-auto` centres the
             strip only while it fits.
 
-            Deliberately no mouse drag-to-scroll. setPointerCapture on this
-            container makes the click land here instead of on the button, which
-            killed category switching outright, and the wheel already covers
-            desktop - the mechanism bought nothing it did not also break. */}
+            Mouse drag-to-scroll lives in onCategoryMouseDown - see the note
+            there about why it avoids setPointerCapture. */}
         <div className="sticky top-[70px] z-30 mb-8">
             <div className="relative bg-white/90 backdrop-blur-sm border-b border-gray-100">
                 <div
                     ref={categoryScrollRef}
                     onScroll={updateCategoryEdges}
-                    className="overflow-x-auto no-scrollbar py-3 md:py-4"
+                    onMouseDown={onCategoryMouseDown}
+                    className={`overflow-x-auto no-scrollbar select-none py-3 md:py-4 ${
+                        categoryDragging
+                            ? 'cursor-grabbing'
+                            : categoryEdges.left || categoryEdges.right
+                                ? 'cursor-grab'
+                                : ''
+                    }`}
                 >
                     <div className="flex w-max mx-auto gap-4 px-4">
                         {CATEGORIES.map(cat => (
@@ -1031,6 +1076,7 @@ export default function App() {
                                 key={cat.id}
                                 ref={activeCategory === cat.id ? activeCategoryRef : undefined}
                                 onClick={() => {
+                                    if (categoryMovedRef.current) return; // that was a drag
                                     setActiveCategory(cat.id);
                                     setVisibleCount(8);
                                 }}
