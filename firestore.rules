@@ -76,6 +76,18 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // Site orders, one document per checkout. Unlike every other collection
+    // here this holds personal data - name, phone, city, Nova Poshta branch -
+    // so there is no public read. Nothing on the client writes here either:
+    // the document is created by sendOrderNotification through the Admin SDK,
+    // which bypasses rules entirely, so both client paths stay shut. Note that
+    // rules are not filters: any admin query on this collection has to be one
+    // isAdmin() already allows, or it fails outright rather than returning less.
+    match /orders/{orderId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
     // Everything else stays locked down.
     match /{document=**} {
       allow read, write: if false;

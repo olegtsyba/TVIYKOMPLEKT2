@@ -1,5 +1,10 @@
 const { onRequest } = require("firebase-functions/v2/https");
 const { defineString } = require("firebase-functions/params");
+const { initializeApp } = require("firebase-admin/app");
+const { getFirestore, FieldValue } = require("firebase-admin/firestore");
+
+initializeApp();
+const db = getFirestore();
 
 const KEYCRM_API_KEY = defineString("KEYCRM_API_KEY");
 const KEYCRM_BASE_URL = "https://openapi.keycrm.app/v1";
@@ -91,6 +96,46 @@ function escapeHtml(value) {
     .replace(/>/g, "&gt;");
 }
 
+// Readable enough to eyeball in Firestore, and unique enough to double as the
+// KeyCRM `source_uuid` idempotency key once orders reach the CRM.
+function buildOrderId() {
+  const now = new Date().toISOString().slice(0, 10);
+  return `web-${now}-${crypto.randomUUID().slice(0, 8)}`;
+}
+
+// This is the first place the project persists client-supplied data, so take
+// only known fields, coerce the types and cap the lengths.
+function sanitizeItem(item) {
+  const obj = item && typeof item === "object" ? item : {};
+  const text = (value, max) =>
+    isNonEmptyString(value) ? value.trim().slice(0, max) : null;
+  // Number() lets Infinity through, which Firestore would happily store.
+  const price = Number(obj.price);
+  return {
+    title: text(obj.title, 200),
+    size: text(obj.size, 40),
+    color: text(obj.color, 60),
+    sku: text(obj.sku, 60),
+    price: Number.isFinite(price) && price > 0 ? price : 0,
+    quantity: 1, // the cart has no quantity control; each add is its own line
+  };
+}
+
+// Best-effort: the order is already stored, so a failed status update must not
+// turn into a failed request.
+async function markOrder(orderId, telegram, error) {
+  try {
+    await db.collection("orders").doc(orderId).update({
+      status: "logged",
+      telegram,
+      telegramError: error,
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+  } catch (err) {
+    console.error("Failed to update order log", orderId, err);
+  }
+}
+
 function isNonEmptyString(value) {
   return typeof value === "string" && value.trim().length > 0;
 }
@@ -101,13 +146,17 @@ function isNonEmptyString(value) {
 //
 // Request  (POST, JSON):
 //   { customer: { firstName, lastName, phone, city, branch },
-//     items: [{ title, size, price }], total }
+//     items: [{ title, size, color, price, sku }], total }
+//
+// Every order is written to Firestore `orders/{orderId}` BEFORE Telegram is
+// called, so a Telegram outage can no longer lose an order outright - which it
+// silently did while the message was the only record.
+//
 // Response:
-//   200 { ok: true }                              - delivered
+//   200 { ok: true, orderId }                     - logged (Telegram may still have failed)
 //   400 { error }                                 - malformed payload
 //   405 { error }                                 - wrong method
-//   502 { error: "telegram_unreachable" }         - network error calling Telegram
-//   502 { error: "telegram_rejected", status }    - Telegram returned non-2xx
+//   500 { error: "log_failed" }                   - could not persist; the client should retry
 exports.sendOrderNotification = onRequest(
   { cors: true, region: "us-central1" },
   async (req, res) => {
@@ -140,6 +189,29 @@ exports.sendOrderNotification = onRequest(
     }
     if (!Array.isArray(items) || items.length === 0) {
       res.status(400).json({ error: "Missing items" });
+      return;
+    }
+
+    // Persist first. Everything below is best-effort: the order already exists.
+    const orderId = buildOrderId();
+    try {
+      await db.collection("orders").doc(orderId).set({
+        source: "web",
+        status: "pending",
+        telegram: "pending",
+        customer: { firstName, lastName, phone, city, branch },
+        items: items.map(sanitizeItem),
+        // Reported by the client and NOT trusted - recomputed server-side once
+        // orders start reaching KeyCRM.
+        clientTotal: Number.isFinite(Number(total)) ? Number(total) : 0,
+        // Placeholder so online payments can be added without reshaping the doc.
+        payment: { status: "unpaid", kind: "none", amount: 0, method: null },
+        createdAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+    } catch (err) {
+      console.error("Failed to log order", err);
+      res.status(500).json({ error: "log_failed" });
       return;
     }
 
@@ -177,17 +249,20 @@ exports.sendOrderNotification = onRequest(
       );
     } catch (err) {
       console.error("Telegram request failed", err);
-      res.status(502).json({ error: "telegram_unreachable" });
+      await markOrder(orderId, "failed", "telegram_unreachable");
+      res.status(200).json({ ok: true, orderId });
       return;
     }
 
     if (!tgRes.ok) {
       const tgBody = await tgRes.text().catch(() => "");
       console.error("Telegram rejected sendMessage", tgRes.status, tgBody);
-      res.status(502).json({ error: "telegram_rejected", status: tgRes.status });
+      await markOrder(orderId, "failed", `telegram_rejected_${tgRes.status}`);
+      res.status(200).json({ ok: true, orderId });
       return;
     }
 
-    res.status(200).json({ ok: true });
+    await markOrder(orderId, "sent", null);
+    res.status(200).json({ ok: true, orderId });
   }
 );

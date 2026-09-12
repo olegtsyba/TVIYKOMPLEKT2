@@ -600,6 +600,9 @@ export default function App() {
             size: item.selectedSize,
             color: item.selectedColor,
             price: item.price,
+            // Links the line back to the KeyCRM catalog; absent for carts saved
+            // before this shipped. Ignored until orders reach the CRM.
+            ...(item.selectedSku ? { sku: item.selectedSku } : {}),
           })),
           total: cartTotal,
         })
