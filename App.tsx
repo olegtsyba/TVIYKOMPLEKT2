@@ -165,7 +165,6 @@ export default function App() {
   const variantsLoadedRef = useRef<Set<string>>(new Set());
   const categoryScrollRef = useRef<HTMLDivElement>(null);
   const activeCategoryRef = useRef<HTMLButtonElement>(null);
-  const categoryDrag = useRef({ active: false, startX: 0, startLeft: 0, moved: false });
   const [categoryEdges, setCategoryEdges] = useState({ left: false, right: false });
 
   // Which side still hides categories, so only that edge gets a fade.
@@ -205,33 +204,6 @@ export default function App() {
   useEffect(() => {
     activeCategoryRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
   }, [activeCategory]);
-
-  // Mouse only: touch already scrolls natively, and hijacking it would fight the
-  // browser. `moved` suppresses the click that a drag would otherwise fire.
-  const onCategoryPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    // Reset first: a stale `moved` from an earlier drag would swallow this click.
-    categoryDrag.current = { active: false, startX: e.clientX, startLeft: 0, moved: false };
-    if (e.pointerType !== 'mouse') return;
-    const el = categoryScrollRef.current;
-    if (!el || el.scrollWidth <= el.clientWidth) return;
-    categoryDrag.current = { active: true, startX: e.clientX, startLeft: el.scrollLeft, moved: false };
-    el.setPointerCapture(e.pointerId);
-  };
-
-  const onCategoryPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    const drag = categoryDrag.current;
-    if (!drag.active) return;
-    const delta = e.clientX - drag.startX;
-    if (Math.abs(delta) > 3) drag.moved = true;
-    const el = categoryScrollRef.current;
-    if (el) el.scrollLeft = drag.startLeft - delta;
-  };
-
-  const endCategoryDrag = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!categoryDrag.current.active) return;
-    categoryDrag.current.active = false;
-    categoryScrollRef.current?.releasePointerCapture(e.pointerId);
-  };
 
   // Fetch Data Effect
   useEffect(() => {
@@ -1033,21 +1005,21 @@ export default function App() {
       {/* Main Content */}
       <main id="catalog" className="flex-grow container mx-auto px-4 py-12">
         
-        {/* Categories — one row that scrolls. No justify-center: with overflow it
-            pushes the excess out both sides and the left end becomes unreachable.
-            `w-max mx-auto` centres the strip only while it fits. */}
+        {/* Categories — one row that scrolls: swipe on touch, wheel on desktop.
+            No justify-center: with overflow it pushes the excess out both sides
+            and the left end becomes unreachable. `w-max mx-auto` centres the
+            strip only while it fits.
+
+            Deliberately no mouse drag-to-scroll. setPointerCapture on this
+            container makes the click land here instead of on the button, which
+            killed category switching outright, and the wheel already covers
+            desktop - the mechanism bought nothing it did not also break. */}
         <div className="sticky top-[70px] z-30 mb-8">
             <div className="relative bg-white/90 backdrop-blur-sm border-b border-gray-100">
                 <div
                     ref={categoryScrollRef}
                     onScroll={updateCategoryEdges}
-                    onPointerDown={onCategoryPointerDown}
-                    onPointerMove={onCategoryPointerMove}
-                    onPointerUp={endCategoryDrag}
-                    onPointerCancel={endCategoryDrag}
-                    className={`overflow-x-auto no-scrollbar py-3 md:py-4 ${
-                        categoryEdges.left || categoryEdges.right ? 'cursor-grab active:cursor-grabbing' : ''
-                    }`}
+                    className="overflow-x-auto no-scrollbar py-3 md:py-4"
                 >
                     <div className="flex w-max mx-auto gap-4 px-4">
                         {CATEGORIES.map(cat => (
@@ -1055,7 +1027,6 @@ export default function App() {
                                 key={cat.id}
                                 ref={activeCategory === cat.id ? activeCategoryRef : undefined}
                                 onClick={() => {
-                                    if (categoryDrag.current.moved) return; // a drag, not a click
                                     setActiveCategory(cat.id);
                                     setVisibleCount(8);
                                 }}
