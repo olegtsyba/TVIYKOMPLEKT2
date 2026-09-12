@@ -72,6 +72,7 @@ export interface RelatedColor {
 // already filtered out, so any entry here is a genuine purchasable variant.
 export interface ProductVariantOffer {
   offerId: number;
+  sku: string; // KeyCRM article - the only way an order line links back to the catalog
   color: string | null; // canonical color name (see constants.ts COLOR_ALIASES), null if this product has no color property
   size: string | null;  // normalized size label, null if this product has no size property
   price: number;
@@ -116,6 +117,10 @@ export interface Promotion {
 export interface CartItem extends Product {
   selectedSize: string;
   selectedColor?: string;
+  // Resolved when the item is added, not at checkout: the offer list can be
+  // refreshed in the background afterwards. Absent for manual products, for
+  // carts saved before this existed, and when no offer matches.
+  selectedSku?: string;
   cartId: number;
 }
 

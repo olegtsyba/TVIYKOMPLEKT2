@@ -506,7 +506,19 @@ export default function App() {
       return;
     }
     const finalSize = size || "One Size";
-    const newItem: CartItem = { ...product, selectedSize: finalSize, selectedColor: color || undefined, cartId: Date.now() };
+    // Same matching as isVariantAvailable. Captured now rather than at checkout
+    // because the offer list is refreshed in the background afterwards.
+    const matchedOffer = (product.variantOffers || []).find(o =>
+      (!color || o.color === color) &&
+      (!size || o.size === size)
+    );
+    const newItem: CartItem = {
+      ...product,
+      selectedSize: finalSize,
+      selectedColor: color || undefined,
+      ...(matchedOffer?.sku ? { selectedSku: matchedOffer.sku } : {}),
+      cartId: Date.now(),
+    };
     setCart([...(cart || []), newItem]);
     showToast(`✅ ${product.title} додано!`);
     setIsCartOpen(true);

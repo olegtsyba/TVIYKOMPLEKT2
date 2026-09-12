@@ -134,7 +134,9 @@ export async function fetchAllKeycrmOffers(onPage?: (pageOffers: KeycrmOffer[]) 
 // deriveVariants on every catalog visit. sessionStorage (not localStorage) -
 // cleared per tab/session by design, so a schema change never needs manual
 // cache-busting for returning visitors.
-const OFFERS_VARIANTS_CACHE_KEY = 'tvk_offers_variants_cache_v1';
+// v2: entries gained `sku`. Bumping the key drops v1 caches, which would
+// otherwise feed returning visitors variant data with no sku in it.
+const OFFERS_VARIANTS_CACHE_KEY = 'tvk_offers_variants_cache_v2';
 
 export function readCachedOfferVariants(): Record<string, ProductVariants> | null {
   try {
@@ -309,6 +311,7 @@ export function deriveVariants(offers: KeycrmOffer[]): ProductVariants {
 
     variantOffers.push({
       offerId: offer.id,
+      sku: offer.sku,
       color,
       size,
       price: offer.price,
