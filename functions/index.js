@@ -123,12 +123,21 @@ function sanitizeItem(item) {
 
 // Best-effort: the order is already stored, so a failed status update must not
 // turn into a failed request.
-async function markOrder(orderId, telegram, error) {
+async function markOrder(orderId, telegram, error, crm = {}) {
   try {
     await db.collection("orders").doc(orderId).update({
-      status: "logged",
+      // 'sent' once KeyCRM has it; 'failed' is what the step 4 sweep picks up.
+      status: crm.status === "sent" ? "sent" : crm.status === "failed" ? "failed" : "logged",
       telegram,
       telegramError: error,
+      crmStatus: crm.status ?? "skipped",
+      crmError: crm.error ?? null,
+      keycrmOrderId: crm.keycrmOrderId ?? null,
+      serverTotal: crm.serverTotal ?? null,
+      priceMismatch: crm.mismatches?.length ? crm.mismatches : null,
+      crmWarnings: crm.warnings?.length ? crm.warnings : null,
+      skuResolved: crm.skuResolved ?? null,
+      attempts: FieldValue.increment(1),
       updatedAt: FieldValue.serverTimestamp(),
     });
   } catch (err) {
@@ -136,8 +145,217 @@ async function markOrder(orderId, telegram, error) {
   }
 }
 
+async function sendTelegram(text) {
+  try {
+    await fetch(`https://api.telegram.org/bot${TG_BOT_TOKEN.value()}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: TG_CHAT_ID.value(), parse_mode: "html", text }),
+    });
+  } catch (err) {
+    console.error("Telegram send failed", err);
+  }
+}
+
 function isNonEmptyString(value) {
   return typeof value === "string" && value.trim().length > 0;
+}
+
+
+// --- KeyCRM order creation -------------------------------------------------
+
+// Defaults if settings/catalog is missing or unreadable. The source falls back
+// to the TEST one on purpose: a misconfigured deploy should pollute the test
+// filter, never the real order flow.
+const CRM_DEFAULT_SOURCE_ID = 3; // "Сайт (тест)"
+const CRM_DELIVERY_SERVICE_ID = 3; // "Нова Пошта Циба"
+const CRM_BACKOFF_MS = [1000, 2000, 4000];
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function readCrmSettings() {
+  try {
+    const snap = await db.collection("settings").doc("catalog").get();
+    const data = snap.exists ? snap.data() : {};
+    return {
+      crmEnabled: data.crmEnabled !== false, // opt-out, not opt-in
+      orderSourceId: Number(data.orderSourceId) || CRM_DEFAULT_SOURCE_ID,
+    };
+  } catch (err) {
+    console.error("Could not read settings/catalog, using defaults", err);
+    return { crmEnabled: true, orderSourceId: CRM_DEFAULT_SOURCE_ID };
+  }
+}
+
+// `retry` is off for POST: a 5xx can arrive after the order was actually
+// created, so retrying here would duplicate it. Failed creates are left to the
+// step 4 sweep, which re-checks source_uuid first.
+async function keycrmRequest(path, { method = "GET", body, retry = true } = {}) {
+  const attempts = retry ? CRM_BACKOFF_MS.length + 1 : 1;
+  let lastError;
+
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    if (attempt > 0) await sleep(CRM_BACKOFF_MS[attempt - 1]);
+
+    let res;
+    try {
+      res = await fetch(KEYCRM_BASE_URL + path, {
+        method,
+        headers: {
+          Authorization: `Bearer ${KEYCRM_API_KEY.value()}`,
+          Accept: "application/json",
+          ...(body ? { "Content-Type": "application/json" } : {}),
+        },
+        ...(body ? { body: JSON.stringify(body) } : {}),
+      });
+    } catch (err) {
+      lastError = err;
+      continue;
+    }
+
+    const text = await res.text();
+    if (res.status === 429 || res.status >= 500) {
+      lastError = new Error(`KeyCRM ${res.status}: ${text.slice(0, 200)}`);
+      continue;
+    }
+    if (!res.ok) throw new Error(`KeyCRM ${res.status}: ${text.slice(0, 300)}`);
+    return text ? JSON.parse(text) : {};
+  }
+
+  throw lastError || new Error("KeyCRM unreachable");
+}
+
+async function findOfferBySku(sku) {
+  const data = await keycrmRequest(
+    `/offers?filter[sku]=${encodeURIComponent(sku)}&limit=2`
+  );
+  const rows = Array.isArray(data.data) ? data.data : [];
+  return { offer: rows[0] || null, matches: rows.length };
+}
+
+// Already created? Runs before every POST, including the step 4 retries, so the
+// same source_uuid can never produce two orders.
+async function findExistingOrderId(sourceUuid) {
+  const data = await keycrmRequest(
+    `/order?filter[source_uuid]=${encodeURIComponent(sourceUuid)}&limit=1`
+  );
+  const rows = Array.isArray(data.data) ? data.data : [];
+  return rows[0]?.id ?? null;
+}
+
+// The customer is charged what the site showed them. When KeyCRM disagrees the
+// site was working from stale data - the line keeps the promised price and the
+// manager gets told loudly, because there is no online payment and they confirm
+// every order anyway.
+async function buildCrmProducts(items) {
+  const products = [];
+  const mismatches = [];
+  const warnings = [];
+
+  for (const item of items) {
+    const properties = [];
+    if (item.color) properties.push({ name: "Колір", value: item.color });
+    if (item.size) properties.push({ name: "Розмір", value: item.size });
+
+    const line = {
+      name: item.title || "Товар",
+      price: item.price,
+      quantity: item.quantity,
+      unit_type: "шт",
+      ...(properties.length > 0 ? { properties } : {}),
+    };
+
+    if (!item.sku) {
+      products.push({ line, skuResolved: false });
+      continue;
+    }
+
+    let offer = null;
+    let matches = 0;
+    try {
+      ({ offer, matches } = await findOfferBySku(item.sku));
+    } catch (err) {
+      console.error("Offer lookup failed", item.sku, err);
+      warnings.push(`не вдалось перевірити артикул ${item.sku}`);
+    }
+
+    if (!offer) {
+      // Still worth sending: a line with no catalog link beats a lost order.
+      warnings.push(`артикул ${item.sku} не знайдено в каталозі`);
+      products.push({ line, skuResolved: false });
+      continue;
+    }
+    if (matches > 1) warnings.push(`артикул ${item.sku} не унікальний у каталозі`);
+
+    if (Number(offer.price) > 0 && Number(offer.price) !== item.price) {
+      mismatches.push({ sku: item.sku, site: item.price, crm: Number(offer.price) });
+    }
+
+    // KeyCRM links the line to the offer by sku on its own.
+    products.push({ line: { ...line, sku: item.sku }, skuResolved: true });
+  }
+
+  return { products, mismatches, warnings };
+}
+
+function buildManagerComment(sourceId, mismatches, warnings) {
+  const parts = [];
+  if (sourceId === CRM_DEFAULT_SOURCE_ID) parts.push("[ТЕСТ]");
+  parts.push("Замовлення з сайту tviykomplekt.com");
+  for (const m of mismatches) {
+    parts.push(`⚠️ ЦІНА ${m.sku}: сайт ${m.site} / CRM ${m.crm} — перевірити`);
+  }
+  for (const w of warnings) parts.push(`⚠️ ${w}`);
+  return parts.join("\n");
+}
+
+
+// Returns what the log should record. Never throws: a CRM failure must not cost
+// us the Telegram message or the customer's success response.
+async function pushOrderToCrm({ orderId, customer, items, settings }) {
+  const { products, mismatches, warnings } = await buildCrmProducts(items);
+  const serverTotal = products.reduce(
+    (sum, p) => sum + (Number(p.line.price) || 0) * (Number(p.line.quantity) || 0),
+    0
+  );
+  const skuResolved = products.map((p) => p.skuResolved);
+
+  const existingId = await findExistingOrderId(orderId);
+  if (existingId) {
+    console.warn("Order already in KeyCRM, skipping create", orderId, existingId);
+    return { status: "sent", keycrmOrderId: existingId, serverTotal, mismatches, warnings, skuResolved };
+  }
+
+  const fullName = `${customer.firstName} ${customer.lastName}`.trim();
+  const phone = toInternationalPhone(customer.phone);
+
+  const created = await keycrmRequest("/order", {
+    method: "POST",
+    retry: false,
+    body: {
+      source_id: settings.orderSourceId,
+      source_uuid: orderId,
+      manager_comment: buildManagerComment(settings.orderSourceId, mismatches, warnings),
+      buyer: { full_name: fullName, phone },
+      shipping: {
+        delivery_service_id: CRM_DELIVERY_SERVICE_ID,
+        shipping_address_city: customer.city,
+        shipping_receive_point: customer.branch,
+        recipient_full_name: fullName,
+        recipient_phone: phone,
+      },
+      products: products.map((p) => p.line),
+    },
+  });
+
+  return { status: "sent", keycrmOrderId: created?.id ?? null, serverTotal, mismatches, warnings, skuResolved };
+}
+
+// KeyCRM asks for the international form; the checkout already normalises to
+// exactly 12 digits, so this is just a reformat.
+function toInternationalPhone(value) {
+  const digits = String(value).replace(/\D/g, "");
+  return digits ? `+${digits}` : String(value);
 }
 
 // Receives a structured order payload from the storefront checkout and relays
@@ -215,6 +433,24 @@ exports.sendOrderNotification = onRequest(
       return;
     }
 
+    // KeyCRM next. Failures are recorded, never fatal: the order is already
+    // stored and the customer must not be asked to submit it again.
+    const settings = await readCrmSettings();
+    let crm = { status: "skipped" };
+    if (settings.crmEnabled) {
+      try {
+        crm = await pushOrderToCrm({
+          orderId,
+          customer: { firstName, lastName, phone, city, branch },
+          items: items.map(sanitizeItem),
+          settings,
+        });
+      } catch (err) {
+        console.error("KeyCRM order creation failed", orderId, err);
+        crm = { status: "failed", error: String(err.message || err).slice(0, 500) };
+      }
+    }
+
     // Same message layout as the previous client-side implementation.
     let message = `<b>📦 НОВЕ ЗАМОВЛЕННЯ!</b>\n\n`;
     message += `👤 <b>Клієнт:</b> ${escapeHtml(firstName)} ${escapeHtml(lastName)}\n`;
@@ -232,6 +468,9 @@ exports.sendOrderNotification = onRequest(
       message += `${index + 1}. ${title} (${variant}) - ${price} грн\n`;
     });
     message += `\n💰 <b>Разом до сплати:</b> ${Number(total) || 0} грн`;
+    if (crm.status === "failed") {
+      message += `\n\n⚠️ <b>НЕ ПОТРАПИЛО В CRM</b> — заявка збережена, id ${escapeHtml(orderId)}`;
+    }
 
     let tgRes;
     try {
@@ -249,7 +488,7 @@ exports.sendOrderNotification = onRequest(
       );
     } catch (err) {
       console.error("Telegram request failed", err);
-      await markOrder(orderId, "failed", "telegram_unreachable");
+      await markOrder(orderId, "failed", "telegram_unreachable", crm);
       res.status(200).json({ ok: true, orderId });
       return;
     }
@@ -257,12 +496,22 @@ exports.sendOrderNotification = onRequest(
     if (!tgRes.ok) {
       const tgBody = await tgRes.text().catch(() => "");
       console.error("Telegram rejected sendMessage", tgRes.status, tgBody);
-      await markOrder(orderId, "failed", `telegram_rejected_${tgRes.status}`);
+      await markOrder(orderId, "failed", `telegram_rejected_${tgRes.status}`, crm);
       res.status(200).json({ ok: true, orderId });
       return;
     }
 
-    await markOrder(orderId, "sent", null);
+    // Separate message so a price mismatch is not buried inside a normal order.
+    if (crm.mismatches?.length) {
+      const lines = crm.mismatches
+        .map((m) => `${escapeHtml(m.sku)}: сайт ${m.site} / CRM ${m.crm}`)
+        .join("\n");
+      await sendTelegram(
+        `⚠️ <b>РОЗБІЖНІСТЬ ЦІН</b>\nЗамовлення ${escapeHtml(orderId)}\n\n${lines}\n\nУ CRM пішла ціна з сайту — перевірте.`
+      );
+    }
+
+    await markOrder(orderId, "sent", null, crm);
     res.status(200).json({ ok: true, orderId });
   }
 );
